@@ -1,5 +1,5 @@
 # Capstone Weekly Report
-![Basic Rag](Basic_rag.jpg "Basic Rag Diagram")
+![Basic Rag](Basic_rag.png "Basic Rag Diagram")
 
 
 ## 09.03.2024
