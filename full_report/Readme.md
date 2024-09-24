@@ -48,3 +48,21 @@
     * [ ] Evaluate and test data from different sources for the project.
 
 ---
+
+### Date: Sep 24, 2024
+- **Topics of Discussion:**
+    - **Test Folder Structure and Script Actions:** Refining the test folder structure and defining actions for testing vector store and embedding model.
+    - **Main Folder Setup:** Creating a main folder to organize the main functions and core components of the project.
+    - **PDF Parser Integration:** Integrating a PDF parser into the system to handle document processing.
+    - **PDF Download Function:** Developing a Python function to download PDF documents from links mentioned in the data source of BioASQ - Task B.
+
+- **Action Items:**
+    * [ ] Refine the folder structure for test scripts, specifically for vector store and embedding model.
+    * [ ] Define specific actions and test cases for validating vector store and embedding model functionalities.
+    * [ ] Create a main folder for organizing core functions and essential project components.
+    * [ ] Integrate a PDF parser into the system for handling document processing.
+    * [ ] Develop a Python function to download PDF documents from links mentioned in BioASQ - Task B data source.
+    * [ ] Test the PDF download function with a sample link and validate the parser's integration.
+
+---
+
