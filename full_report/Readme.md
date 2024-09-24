@@ -7,9 +7,9 @@
     - **Multi-Agent System:** Exploration of how multiple agents can be used to enhance the performance of language models.
 
 - **Action Items:**
-    * [ ] Deep dive into RAG architecture.
-    * [ ] Explore practical use cases for LangChain in RAG.
-    * [ ] Research potential benefits of multi-agent systems in language models.
+    * [&#x2611;] Deep dive into RAG architecture.
+    * [&#x2611;] Explore practical use cases for LangChain in RAG.
+    * [&#x2611;] Research potential benefits of multi-agent systems in language models.
 
 ---
 
