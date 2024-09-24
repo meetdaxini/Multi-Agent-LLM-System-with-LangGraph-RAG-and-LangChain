@@ -1,5 +1,5 @@
 # Capstone Weekly Report
-![Basic Rag diagram](https://github.com/Akamemz/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/blob/main/full_report/Basic_Rag.png)
+![Basic Rag diagram](Basic_Rag.png)
 
 
 ## 09.03.2024
