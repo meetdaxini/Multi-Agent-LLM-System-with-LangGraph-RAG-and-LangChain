@@ -11,7 +11,7 @@ class HuggingFaceLLM(BaseLLM):
 
     def __init__(
         self,
-        model_name: str,
+        model_name: str, # TODO: add validations based on supported models
         device: Optional[str] = None,
         torch_dtype: Optional[torch.dtype] = torch.float32,
         load_in_8bit: bool = False,
@@ -120,7 +120,7 @@ class HuggingFaceLLM(BaseLLM):
         return output
 
 
-    def generate_response(        self,
+    def generate_response(self,
         prompt: str,
         max_length: int = 256,
         num_return_sequences: int = 1,
@@ -155,6 +155,45 @@ class HuggingFaceLLM(BaseLLM):
         response_ids = outputs[0][input_ids.shape[-1]:]
         answer = self.tokenizer.decode(response_ids, skip_special_tokens=True).strip()
         return answer
+
+    def generate_response_with_context(self,
+        context,
+        prompt: str,
+        max_length: int = 256,
+        num_return_sequences: int = 1,
+        no_repeat_ngram_size: Optional[int] = None,
+        early_stopping: bool = True,
+        temperature: float = 0.7,
+        top_k: int = 50,
+        top_p: float = 0.95,
+        **kwargs
+        ):
+        messages = [
+            {"role": "system", "content": "You are an AI assistant that provides helpful answers using the given context."},
+            {"role": "user", "content": f"Context:\n{context}\n\nQuestion:\n{prompt}"},
+        ]  
+        input_ids = self.tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            return_tensors="pt"
+        ).to(self.model.device)    
+        outputs = self.model.generate(
+                input_ids=input_ids,
+                max_length=max_length,
+                num_return_sequences=num_return_sequences,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                early_stopping=early_stopping,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+            pad_token_id=self.tokenizer.eos_token_id,
+            **kwargs
+        )    
+        response_ids = outputs[0][input_ids.shape[-1]:]
+        answer = self.tokenizer.decode(response_ids, skip_special_tokens=True).strip()
+        return answer
+
+
 
     def clean_up(self):
         """
