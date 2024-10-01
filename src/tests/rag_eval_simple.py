@@ -1,9 +1,9 @@
 # evaluation.py
 
 from datasets import load_dataset
-from my_rag.embeddings.huggingface_embedding import HuggingFaceEmbedding
-from my_rag.vectorstores.deeplake_store import DeepLakeVectorStore
-from my_rag.llms.huggingface_llm import HuggingFaceLLM
+from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
+from my_rag.components.vectorstores.deeplake_store import DeepLakeVectorStore
+from my_rag.components.llms.huggingface_llm import HuggingFaceLLM
 import numpy as np
 import torch
 from tqdm import tqdm

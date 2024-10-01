@@ -1,11 +1,10 @@
-from my_rag.embeddings.huggingface_embedding import HuggingFaceEmbedding
-from my_rag.vectorstores.deeplake_store import DeepLakeVectorStore
-from my_rag.llms.huggingface_llm import HuggingFaceLLM
+from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
+from my_rag.components.vectorstores.deeplake_store import DeepLakeVectorStore
+from my_rag.components.llms.huggingface_llm import HuggingFaceLLM
 import numpy as np
 import torch
 
 def main():
-    # Initialize components
     embedding_model = HuggingFaceEmbedding(
         model_name='sentence-transformers/all-MiniLM-L6-v2',
         device='cpu'
@@ -19,7 +18,6 @@ def main():
         device_map='auto',
         trust_remote_code=True,
     )
-    # Sample documents
     documents = [
         "The quick brown fox jumps over the lazy dog.",
         "Artificial intelligence is transforming the world.",
