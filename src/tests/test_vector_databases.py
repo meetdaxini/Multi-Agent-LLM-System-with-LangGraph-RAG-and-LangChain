@@ -1,5 +1,5 @@
-from my_rag.embeddings.huggingface_embedding import HuggingFaceEmbedding
-from my_rag.vectorstores.deeplake_store import DeepLakeVectorStore
+from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
+from my_rag.components.vectorstores.deeplake_store import DeepLakeVectorStore
 import numpy as np
 
 def main():

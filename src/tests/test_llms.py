@@ -1,4 +1,4 @@
-from my_rag.llms.huggingface_llm import HuggingFaceLLM
+from my_rag.components.llms.huggingface_llm import HuggingFaceLLM
 import torch
 
 def main():
