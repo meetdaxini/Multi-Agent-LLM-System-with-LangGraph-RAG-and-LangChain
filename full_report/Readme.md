@@ -66,3 +66,22 @@
 
 ---
 
+
+### Date: Oct 1, 2024
+- **Topics of Discussion:**
+    - **Score RAG:** Evaluating the performance of the Retrieval-Augmented Generation (RAG) system by scoring its results.
+    - **Embedding Models:** Trying different models for embedding to optimize the RAG system's performance.
+    - **Chunking Method:** Experimenting with various chunking methods to improve text processing and retrieval efficiency.
+    - **RAG Pipeline:** Developing a complete pipeline for RAG with comprehensive testing for all its components.
+    - **F-1 Score Evaluation:** Measuring the F-1 score of retrieval at different values of k to evaluate precision and recall in the retrieval process.
+
+- **Action Items:**
+    * [ ] Score RAG to assess its overall performance.
+    * [ ] Try different models for embedding and compare their results.
+    * [ ] Experiment with different chunking methods to optimize the chunk size and method.
+    * [ ] Build a complete pipeline for the RAG system, ensuring all components are tested and functioning.
+    * [ ] Test and record the F-1 score of retrieval at different values of k (e.g., k=5, 10, 20) to assess retrieval quality.
+
+---
+
+
