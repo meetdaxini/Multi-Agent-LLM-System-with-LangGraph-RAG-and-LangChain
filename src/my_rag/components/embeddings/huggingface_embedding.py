@@ -38,6 +38,7 @@ class HuggingFaceEmbedding(BaseEmbedding):
         self.supported_models = [
             'nvidia/NV-Embed-v2',
             'sentence-transformers/all-MiniLM-L6-v2',
+            'dunzhang/stella_en_1.5B_v5',
             # TODO: Add more supported models here
         ]
 
