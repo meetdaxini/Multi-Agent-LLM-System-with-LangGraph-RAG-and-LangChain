@@ -5,8 +5,10 @@ import numpy as np
 def main():
     # Initialize the embedding model
     embedding_model = HuggingFaceEmbedding(
-        model_name='sentence-transformers/all-MiniLM-L6-v2',
-        device='cpu'
+        model_name='nvidia/NV-Embed-v2',
+        device='cuda',
+        trust_remote_code=True,
+        load_in_8bit=True
     )
 
     # Sample documents
@@ -33,6 +35,7 @@ def main():
 
     # Query
     query_text = "What is the role of AI in modern technology?"
+    print(query_text)
     query_embedding = embedding_model.embed([query_text])
     query_embedding = np.array(query_embedding)
 
