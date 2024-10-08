@@ -24,11 +24,11 @@
 ![Basic RAG Diagram](Basic_Rag.png)
 
 - **Action Items:**
-    * [ ] Refine the project workflow diagram.
-    * [ ] Conduct more experiments with different datasets.
-    * [ ] Optimize the RAG pipeline with advanced components.
-    * [ ] Continue model experimentation for improved embeddings.
-    * [ ] Enhance LLM integration based on feedback.
+    * [&check;] Refine the project workflow diagram.
+    * [&check;] Conduct more experiments with different datasets.
+    * [&check;] Optimize the RAG pipeline with advanced components.
+    * [&check;] Continue model experimentation for improved embeddings.
+    * [&check;] Enhance LLM integration based on feedback.
 
 ---
 
@@ -41,11 +41,11 @@
     - **Data Exploration:** Continue testing data from various sources for suitability.
 
 - **Action Items:**
-    * [ ] Conduct a thorough literature review on RAG and multi-agent systems.
-    * [ ] Design and implement a modular code structure.
-    * [ ] Develop and run test scripts for the codebase.
-    * [ ] Initiate data acquisition and cleaning process.
-    * [ ] Evaluate and test data from different sources for the project.
+    * [&check;] Conduct a thorough literature review on RAG and multi-agent systems.
+    * [&check;] Design and implement a modular code structure.
+    * [&check;] Develop and run test scripts for the codebase.
+    * [&check;] Initiate data acquisition and cleaning process.
+    * [&check;] Evaluate and test data from different sources for the project.
 
 ---
 
@@ -57,12 +57,12 @@
     - **PDF Download Function:** Developing a Python function to download PDF documents from links mentioned in the data source of BioASQ - Task B.
 
 - **Action Items:**
-    * [ ] Refine the folder structure for test scripts, specifically for vector store and embedding model.
-    * [ ] Define specific actions and test cases for validating vector store and embedding model functionalities.
-    * [ ] Create a main folder for organizing core functions and essential project components.
-    * [ ] Integrate a PDF parser into the system for handling document processing.
-    * [ ] Develop a Python function to download PDF documents from links mentioned in BioASQ - Task B data source.
-    * [ ] Test the PDF download function with a sample link and validate the parser's integration.
+    * [&check;] Refine the folder structure for test scripts, specifically for vector store and embedding model.
+    * [&check;] Define specific actions and test cases for validating vector store and embedding model functionalities.
+    * [&check;] Create a main folder for organizing core functions and essential project components.
+    * [&check;] Integrate a PDF parser into the system for handling document processing.
+    * [&check;] Develop a Python function to download PDF documents from links mentioned in BioASQ - Task B data source.
+    * [&check;] Test the PDF download function with a sample link and validate the parser's integration.
 
 ---
 
@@ -78,10 +78,25 @@
 - **Action Items:**
     * [ ] Score RAG to assess its overall performance.
     * [ ] Try different models for embedding and compare their results.
-    * [ ] Experiment with different chunking methods to optimize the chunk size and method.
-    * [ ] Build a complete pipeline for the RAG system, ensuring all components are tested and functioning.
+    * [&check;] Experiment with different chunking methods to optimize the chunk size and method.
+    * [&check;] Build a complete pipeline for the RAG system, ensuring all components are tested and functioning.
     * [ ] Test and record the F-1 score of retrieval at different values of k (e.g., k=5, 10, 20) to assess retrieval quality.
 
 ---
+
+### Date: Oct 8, 2024
+- **Topics of Discussion:**
+    - **Embedding Comparison:** Plan to compare embeddings from NVIDIA and other open-source models.
+    - **Data Preparation:** Ensure that at least 50 undamaged PDFs are available for testing.
+    - **Embedding Evaluation:** Test and evaluate the performance of different embeddings on the prepared PDFs in table format.
+    - **Performance Metrics:** Define and use key metrics (e.g., accuracy, speed, memory usage) to compare embeddings.
+    - **Documentation:** Properly document the embedding comparison process and results.
+
+- **Action Items:**
+    * [ ] Gather and prepare at least 50 not-damaged PDFs for testing.
+    * [ ] Implement the embedding process using both NVIDIA and open-source models.
+    * [ ] Define performance metrics for embedding evaluation in table format.
+    * [ ] Run embedding tests and evaluate results using the defined metrics.
+    * [ ] Document the process and findings from the embedding comparison.
 
 
