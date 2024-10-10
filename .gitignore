@@ -172,3 +172,4 @@ full_report/Latex_report/Capstone5_report_v2.tex
 src/docs/_*
 my_vector_store
 chroma
+.DS_Store
