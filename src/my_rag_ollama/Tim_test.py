@@ -91,7 +91,7 @@ queries = [
     "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?",
     "How do Yamanaka factors regulate developmental signaling in ES cells, and what unique role does c-Myc play?",
     "Is Hirschsprung disease a mendelian or a multifactorial disorder?",
-    "Which are the Yamanaka factors?"
+    "Which are the Yamanaka factors?",
     "List signaling molecules (ligands) that interact with the receptor EGFR?",
     "Are long non coding RNAs spliced?",
     "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?"
