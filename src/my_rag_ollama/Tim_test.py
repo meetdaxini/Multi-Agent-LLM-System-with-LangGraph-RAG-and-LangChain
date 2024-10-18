@@ -91,39 +91,41 @@ queries = [
     "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?",
     "How do Yamanaka factors regulate developmental signaling in ES cells, and what unique role does c-Myc play?",
     "Is Hirschsprung disease a mendelian or a multifactorial disorder?",
-    "Which are the Yamanaka factors?"
+    "Which are the Yamanaka factors?",
     "List signaling molecules (ligands) that interact with the receptor EGFR?",
     "Are long non coding RNAs spliced?",
     "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?"
 ]
 
-# Define the ground truth for each query
+
+# Ground truth based on the document ID, to check weather the retrieved document is correct or not
 # ground_truth = {
 #     "Is RANKL secreted from the cells?"
-#     : ["Receptor activator of nuclear factor B ligand (RANKL) is a cytokine predominantly secreted by osteoblasts."],# ["10.3892_mmr.2013.1572.pdf"],
+#     : ["10.3892_mmr.2013.1572.pdf"],
 #
 #     "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?"
-#     : ["Although is still controversial, Trastuzumab (Herceptin) can be of potential use in the treatment of prostate cancer overexpressing HER2, either alone or in combination with other drugs."], # ["10.1158_0008-5472.CAN-06-2731.pdf"],
+#     : ["10.1158_0008-5472.CAN-06-2731.pdf"],
 #
 #     # "How do Yamanaka factors regulate developmental signaling in ES cells, and what unique role does c-Myc play?": ["10.1038_leu.2013.304.pdf", "10.1038_cr.2008.309.pdf"],
 #     "Is Hirschsprung disease a mendelian or a multifactorial disorder?"
-#     : ["Coding sequence mutations in RET, GDNF, EDNRB, EDN3, and SOX10 are involved in the development of Hirschsprung disease. The majority of these genes was shown to be related to Mendelian syndromic forms of Hirschsprung's disease, whereas the non-Mendelian inheritance of sporadic non-syndromic Hirschsprung disease proved to be complex; involvement of multiple loci was demonstrated in a multiplicative model."], # ["10.1186_1471-2350-12-138.pdf"],
+#     : ["10.1186_1471-2350-12-138.pdf"],
 #
 #     "Which are the Yamanaka factors?"
-#     : ["The Yamanaka factors are the OCT4, SOX2, MYC, and KLF4 transcription factors"], # ["10.1038_cr.2008.309.pdf", "10.1038_leu.2013.304.pdf"],
+#     : ["10.1038_cr.2008.309.pdf", "10.1038_leu.2013.304.pdf"],
 #
 #     "List signaling molecules (ligands) that interact with the receptor EGFR?"
-#     : ["The 7 known EGFR ligands  are: epidermal growth factor (EGF), betacellulin (BTC), epiregulin (EPR), heparin-binding EGF (HB-EGF), transforming growth factor [TGF-], amphiregulin (AREG) and epigen (EPG)."], # ["10.1371_journal.pone.0075907.pdf"],
+#     : ["10.1371_journal.pone.0075907.pdf"],
 #
 #     "Are long non coding RNAs spliced?"
-#     : ["Long non coding RNAs appear to be spliced through the same pathway as the mRNAs"], # ["10.1101_gr.132159.111.pdf"],
+#     : ["10.1101_gr.132159.111.pdf"],
 #
 #     "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?"
-#     : ["miR-200a, miR-100, miR-141, miR-200b, miR-200c, miR-203, miR-510, miR-509-5p, miR-132, miR-26a, let-7b, miR-145, miR-182, miR-152, miR-148a, let-7a, let-7i, miR-21, miR-92 and miR-93 could be used as potential biomarkers for epithelial ovarian cancer."], # ["10.3892_or.2012.1625.pdf"]
+#     : ["10.3892_or.2012.1625.pdf"]
 #
 # }
 
 
+# Define the ground truth for each query
 ground_truth = {
     "Is RANKL secreted from the cells?": ["RANKL is secreted", "osteoblasts", "cytokine"],
     "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?": ["Trastuzumab", "HER2", "prostate cancer"],
@@ -133,6 +135,7 @@ ground_truth = {
     "Are long non coding RNAs spliced?": ["non coding RNAs", "spliced"],
     "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?": ["miR-200a", "miR-100", "biomarkers", "epithelial ovarian cancer"]
 }
+
 
 def main():
     # Set the folder path to the folder containing PDFs (data_test)
@@ -158,6 +161,9 @@ def main():
     # Table to store results
     results_table = []
 
+    # Define the values of k to check
+    k_values = [5, 10, 15]
+
     # For each embedding function, create a separate Chroma vector store and query it
     for embedding_name, embedding_function in embedding_functions.items():
         print(f"Processing with embedding: {embedding_name}")
@@ -171,38 +177,41 @@ def main():
 
         # For each query, gather results
         for query in queries:
-            results = db.similarity_search_with_score(query, k=5)
+            for k in k_values:
+                results = db.similarity_search_with_score(query, k=k)
 
-            # Get the ground truth key phrases for the query
-            expected_phrases = ground_truth.get(query, [])
+                # Get the ground truth key phrases for the query
+                expected_phrases = ground_truth.get(query, [])
 
-            # Check if any of the retrieved chunks contain the expected phrases
-            is_correct = any(
-                any(phrase.lower() in result[0].page_content.lower() for phrase in expected_phrases)
-                for result in results
-            )
+                # Check if any of the retrieved chunks contain the expected phrases
+                is_correct = any(
+                    any(phrase.lower() in result[0].page_content.lower() for phrase in expected_phrases)
+                    for result in results
+                )
 
-            # Gather the top result for analysis
-            top_result = results[0] if results else None
-            if top_result:
-                top_document_content, top_score = top_result
-                result_data = {
-                    "Embedding": embedding_name,
-                    "Query": query[:10],
-                    "Top Score": top_score,
-                    "Top Result (Snippet)": top_document_content.page_content[:10],  # Adjusted snippet length
-                    "Correct Retrieved": is_correct,
-                }
-            else:
-                result_data = {
-                    "Embedding": embedding_name,
-                    "Query": query,
-                    "Top Score": "N/A",
-                    "Top Result (Snippet)": "No results",
-                    "Correct Retrieved": is_correct,
-                }
+                # Gather the top result for analysis
+                top_result = results[0] if results else None
+                if top_result:
+                    top_document_content, top_score = top_result
+                    result_data = {
+                        "Embedding": embedding_name,
+                        "Query": query[:10],  # Shorten the query for display purposes
+                        "Top k": k,  # Store the value of k
+                        "Top Score": top_score,
+                        "Top Result (Snippet)": top_document_content.page_content[:10],  # Adjusted snippet length
+                        "Correct Retrieved": is_correct,
+                    }
+                else:
+                    result_data = {
+                        "Embedding": embedding_name,
+                        "Query": query,
+                        "Top k": k,  # Store the value of k
+                        "Top Score": "N/A",
+                        "Top Result (Snippet)": "No results",
+                        "Correct Retrieved": is_correct,
+                    }
 
-            results_table.append(result_data)
+                results_table.append(result_data)
 
         # Optionally clean up the vector store
         db.delete_collection()
@@ -210,14 +219,37 @@ def main():
     # Convert results into a pandas DataFrame
     df = pd.DataFrame(results_table)
 
-    # Calculate accuracy for each embedding
-    accuracy_df = df.groupby('Embedding')['Correct Retrieved'].mean().reset_index()
+    # Calculate accuracy for each embedding and k as before
+    accuracy_df = df.groupby(['Embedding', 'Top k'])['Correct Retrieved'].mean().reset_index()
     accuracy_df.rename(columns={'Correct Retrieved': 'Accuracy'}, inplace=True)
 
-    # Display the results
-    print(df.to_string(index=False))
-    print("\nAccuracy by Embedding:")
+    # Merge the accuracy data back into the original DataFrame `df`
+    df = pd.merge(df, accuracy_df, on=['Embedding', 'Top k'], how='left')
+
+    # Display the updated DataFrame with accuracy included
+    print("\n", df.to_string(index=False))
+
+    # Find the average accuracy for each embedding model
+    average_accuracy_df = df.groupby('Embedding')['Accuracy'].mean().reset_index()
+
+    # Find the highest accuracy
+    best_accuracy = average_accuracy_df['Accuracy'].max()
+
+    # Find the model(s) with the highest accuracy
+    best_models = average_accuracy_df[average_accuracy_df['Accuracy'] == best_accuracy]
+
+    # Display the accuracy of each model for each k
+    print("\nAccuracy of each model for each Top k:")
     print(accuracy_df.to_string(index=False))
+
+    # Output the best model(s)
+    print("\nConclusion:")
+    if len(best_models) == 1:
+        print(
+            f"The best performing model is: {best_models.iloc[0]['Embedding']} with an average accuracy of {best_accuracy:.4f}")
+    else:
+        print(
+            f"The best performing models are: {', '.join(best_models['Embedding'])} with an average accuracy of {best_accuracy:.4f}")
 
 
 if __name__ == "__main__":
