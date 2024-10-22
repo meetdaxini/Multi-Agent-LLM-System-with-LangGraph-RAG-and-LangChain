@@ -75,7 +75,7 @@ class HuggingFaceEmbedding:
     def embed(
         self,
         texts: List[str],
-        instruction: Optional[str] = None,
+        instruction: Optional[str] = "",
         max_length: Optional[int] = None,
         batch_size: int = 32,
         **kwargs,
@@ -96,6 +96,8 @@ class HuggingFaceEmbedding:
         all_embeddings = []
 
         if not hasattr(self.model, "encode"):
+            if instruction:
+                texts = [f"{instruction}{text}" for text in texts]
             # Define default embedding extraction for models without 'encode'
             for i in range(0, len(texts), batch_size):
                 batch_texts = texts[i : i + batch_size]
