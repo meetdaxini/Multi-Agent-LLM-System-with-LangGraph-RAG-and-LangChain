@@ -99,4 +99,19 @@
     * [ ] Run embedding tests and evaluate results using the defined metrics.
     * [ ] Document the process and findings from the embedding comparison.
 
+---
+
+### Date: Oct 22, 2024
+- **Topics of Discussion:**
+    - **Generation Model Development:** Focus on improving the generation step of the RAG pipeline, ensuring relevance and coherence in the generated outputs.
+    - **Evaluation of Embedding, Retrieval, and Generation Models:** Plan to evaluate the embedding, retrieval, and generation stages using key metrics (e.g., embedding accuracy, retrieval F1 score, generation BLEU score).
+    - **Proposal for New RAG Application:** Discuss a new potential RAG application for real-time legal document summarization, leveraging RAG's capability for precise document retrieval and coherent summary generation.
+    - **Reporting and Visualization:** Begin the report on RAG evaluation, documenting results and creating a diagram to illustrate the evaluation flow and proposed application.
+
+- **Action Items:**
+    * [ ] Improve coherence and relevance of generated outputs in the RAG pipeline.
+    * [ ] Define and finalize the evaluation metrics for embedding, retrieval, and generation stages.
+    * [ ] Run embedding, retrieval, and generation tests, then evaluate the results using the defined metrics.
+    * [ ] Draft a proposal for using RAG in real-time legal document summarization.
+    * [ ] Start the report with metrics, evaluation results, and create a diagram to visualize the evaluation process and proposed application.
 
