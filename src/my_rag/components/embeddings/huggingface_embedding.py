@@ -1,11 +1,11 @@
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModel
-from .base import BaseEmbedding
 import gc
 from typing import List, Optional, Dict
 
-class HuggingFaceEmbedding(BaseEmbedding):
+
+class HuggingFaceEmbedding:
     """
     Embedding model using Hugging Face transformers.
     """
@@ -18,7 +18,7 @@ class HuggingFaceEmbedding(BaseEmbedding):
         load_in_8bit: bool = False,
         device_map: Optional[str] = None,
         max_memory: Optional[Dict] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Initializes the Hugging Face embedding model.
@@ -31,14 +31,13 @@ class HuggingFaceEmbedding(BaseEmbedding):
             device_map (Optional[str]): Device map for model parallelism.
             max_memory (Optional[Dict]): Maximum memory allocation for devices.
             **kwargs: Additional keyword arguments for model/tokenizer initialization.
-
-        Raises:
-            ValueError: If the model is not supported or fails to load.
         """
         self.supported_models = [
-            'nvidia/NV-Embed-v2',
-            'sentence-transformers/all-MiniLM-L6-v2',
-            'dunzhang/stella_en_1.5B_v5',
+            "nvidia/NV-Embed-v2",
+            "sentence-transformers/all-MiniLM-L6-v2",
+            "dunzhang/stella_en_1.5B_v5",
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            "dunzhang/stella_en_400M_v5",
             # TODO: Add more supported models here
         ]
 
@@ -48,7 +47,7 @@ class HuggingFaceEmbedding(BaseEmbedding):
             )
 
         self.model_name = model_name
-        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.trust_remote_code = trust_remote_code
         self.load_in_8bit = load_in_8bit
         self.device_map = device_map
@@ -56,9 +55,7 @@ class HuggingFaceEmbedding(BaseEmbedding):
 
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
-                trust_remote_code=self.trust_remote_code,
-                **kwargs
+                self.model_name, trust_remote_code=self.trust_remote_code, **kwargs
             )
 
             self.model = AutoModel.from_pretrained(
@@ -67,18 +64,13 @@ class HuggingFaceEmbedding(BaseEmbedding):
                 load_in_8bit=self.load_in_8bit,
                 device_map=self.device_map,
                 max_memory=self.max_memory,
-                **kwargs
-            ).to(self.device)
+                **kwargs,
+            )
+            if not self.load_in_8bit:
+                self.model = self.model.to(self.device)
 
         except Exception as e:
             raise ValueError(f"Failed to load model '{self.model_name}': {str(e)}")
-
-        # Check if the model has an 'encode' method
-        if not hasattr(self.model, 'encode'):
-            # For models without 'encode', we'll define a default embedding method
-            self.use_default_embedding = True
-        else:
-            self.use_default_embedding = False
 
     def embed(
         self,
@@ -86,7 +78,7 @@ class HuggingFaceEmbedding(BaseEmbedding):
         instruction: Optional[str] = None,
         max_length: Optional[int] = None,
         batch_size: int = 32,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
         """
         Embeds a list of texts.
@@ -100,22 +92,19 @@ class HuggingFaceEmbedding(BaseEmbedding):
 
         Returns:
             torch.Tensor: Normalized embeddings.
-
-        Raises:
-            NotImplementedError: If the model does not support embedding extraction.
         """
         all_embeddings = []
 
-        if self.use_default_embedding:
+        if not hasattr(self.model, "encode"):
             # Define default embedding extraction for models without 'encode'
             for i in range(0, len(texts), batch_size):
-                batch_texts = texts[i:i+batch_size]
+                batch_texts = texts[i : i + batch_size]
                 inputs = self.tokenizer(
                     batch_texts,
                     padding=True,
                     truncation=True,
                     max_length=max_length,
-                    return_tensors='pt'
+                    return_tensors="pt",
                 ).to(self.device)
 
                 with torch.no_grad():
@@ -124,22 +113,26 @@ class HuggingFaceEmbedding(BaseEmbedding):
                     embeddings = outputs.last_hidden_state.mean(dim=1)
                     embeddings = F.normalize(embeddings, p=2, dim=1)
                     all_embeddings.append(embeddings.cpu())
-
+                del embeddings
+                torch.cuda.empty_cache()
+                gc.collect()
         else:
             # Use the model's 'encode' method
             for i in range(0, len(texts), batch_size):
-                batch_texts = texts[i:i+batch_size]
+                batch_texts = texts[i : i + batch_size]
                 embeddings = self.model.encode(
                     batch_texts,
                     instruction=instruction,
                     max_length=max_length,
                     batch_size=batch_size,
-                    **kwargs
+                    **kwargs,
                 )
                 embeddings = F.normalize(embeddings, p=2, dim=1)
                 all_embeddings.append(embeddings.cpu())
+                del embeddings
+                torch.cuda.empty_cache()
+                gc.collect()
 
-        # Concatenate all embeddings
         return torch.cat(all_embeddings, dim=0)
 
     def clean_up(self):
