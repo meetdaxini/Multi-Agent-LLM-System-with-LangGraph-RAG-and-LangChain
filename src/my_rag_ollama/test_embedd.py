@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from langchain_community.vectorstores.chroma import Chroma
-from langchain.document_loaders.pdf import PyPDFDirectoryLoader
+from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
 from get_embedding_function import (
@@ -12,10 +12,10 @@ from get_embedding_function import (
     get_instructor_xl_embeddings,
     get_roberta_large_embeddings,
     get_bert_large_nli_embeddings,
-    get_mxbai_embed_large_embeddings,
+    get_mxbai_embed_large_embeddings,  # ollama pull mxbai-embed-large
 )
 
-# PYTHONPATH=src python3 src/tests/my_rag_ollama/Tim_test.py
+# PYTHONPATH=src python3 src/my_rag_ollama/test_embedd.py
 
 CHROMA_PATH_TEMPLATE = "chroma_{embedding_name}"
 DEFAULT_DATA_PATH = "data_test"
@@ -60,13 +60,11 @@ def split_into_chunks(doc):
     return chunk_docs
 
 
-def split_documents(documents, folder_path=DEFAULT_DATA_PATH):
+def split_documents(documents):
     chunks = []
-    pdf_files = sorted(os.listdir(folder_path))  # List and sort all PDF files in the folder
-    for doc_index, doc in enumerate(documents):
-        # Get the corresponding PDF file name based on document index
-        doc_id = pdf_files[doc_index] if doc_index < len(pdf_files) else f"Document_{doc_index + 1}"
-
+    for doc in documents:
+        # Extract the file name from the 'source' metadata
+        doc_id = os.path.basename(doc.metadata['source'])
         doc.metadata['document_id'] = doc_id
         doc_chunks = split_into_chunks(doc)
         for chunk in doc_chunks:
@@ -98,42 +96,32 @@ queries = [
 ]
 
 
-# Ground truth based on the document ID, to check weather the retrieved document is correct or not
-# ground_truth = {
-#     "Is RANKL secreted from the cells?"
-#     : ["10.3892_mmr.2013.1572.pdf"],
-#
-#     "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?"
-#     : ["10.1158_0008-5472.CAN-06-2731.pdf"],
-#
-#     # "How do Yamanaka factors regulate developmental signaling in ES cells, and what unique role does c-Myc play?": ["10.1038_leu.2013.304.pdf", "10.1038_cr.2008.309.pdf"],
-#     "Is Hirschsprung disease a mendelian or a multifactorial disorder?"
-#     : ["10.1186_1471-2350-12-138.pdf"],
-#
-#     "Which are the Yamanaka factors?"
-#     : ["10.1038_cr.2008.309.pdf", "10.1038_leu.2013.304.pdf"],
-#
-#     "List signaling molecules (ligands) that interact with the receptor EGFR?"
-#     : ["10.1371_journal.pone.0075907.pdf"],
-#
-#     "Are long non coding RNAs spliced?"
-#     : ["10.1101_gr.132159.111.pdf"],
-#
-#     "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?"
-#     : ["10.3892_or.2012.1625.pdf"]
-#
-# }
-
-
-# Define the ground truth for each query
+# Ground truth based on the document ID, to check whether the retrieved document is correct or not
 ground_truth = {
-    "Is RANKL secreted from the cells?": ["RANKL is secreted", "osteoblasts", "cytokine"],
-    "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?": ["Trastuzumab", "HER2", "prostate cancer"],
-    "Is Hirschsprung disease a mendelian or a multifactorial disorder?": ["Hirschsprung", "mendelian", "multifactorial"],
-    "Which are the Yamanaka factors?": ["OCT4", "SOX2", "MYC", "KLF4"],
-    "List signaling molecules (ligands) that interact with the receptor EGFR?": ["EGFR ligands", "EGF", "TGF-", "HB-EGF"],
-    "Are long non coding RNAs spliced?": ["non coding RNAs", "spliced"],
-    "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?": ["miR-200a", "miR-100", "biomarkers", "epithelial ovarian cancer"]
+    "Is RANKL secreted from the cells?"
+    : ["10.3892_mmr.2013.1572.pdf"],
+
+    "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?"
+    : ["10.1158_0008-5472.CAN-06-2731.pdf"],
+
+    "How do Yamanaka factors regulate developmental signaling in ES cells, and what unique role does c-Myc play?"
+    : ["10.1038_leu.2013.304.pdf", "10.1038_cr.2008.309.pdf"],
+
+    "Is Hirschsprung disease a mendelian or a multifactorial disorder?"
+    : ["10.1186_1471-2350-12-138.pdf"],
+
+    "Which are the Yamanaka factors?"
+    : ["10.1038_cr.2008.309.pdf", "10.1038_leu.2013.304.pdf"],
+
+    "List signaling molecules (ligands) that interact with the receptor EGFR?"
+    : ["10.1371_journal.pone.0075907.pdf"],
+
+    "Are long non coding RNAs spliced?"
+    : ["10.1101_gr.132159.111.pdf"],
+
+    "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?"
+    : ["10.3892_or.2012.1625.pdf"]
+
 }
 
 
@@ -141,13 +129,14 @@ def main():
     # Set the folder path to the folder containing PDFs (data_test)
     folder_path = DEFAULT_DATA_PATH
 
-    # Load documents and split into chunks, using the PDF file names as document IDs
+    # Load documents
     documents = load_documents(folder_path)
     if not documents:
-        print("No documents found.")
+        print("No documents found. Please try again.")
         return
 
-    chunks = split_documents(documents, folder_path)
+    # Split documents into chunks
+    chunks = split_documents(documents)  # Removed 'folder_path' argument
 
     # Define different embedding functions
     embedding_functions = {
@@ -162,7 +151,7 @@ def main():
     results_table = []
 
     # Define the values of k to check
-    k_values = [5, 10, 15]
+    k_values = [1, 2, 3, 4, 5]
 
     # For each embedding function, create a separate Chroma vector store and query it
     for embedding_name, embedding_function in embedding_functions.items():
@@ -180,34 +169,43 @@ def main():
             for k in k_values:
                 results = db.similarity_search_with_score(query, k=k)
 
-                # Get the ground truth key phrases for the query
-                expected_phrases = ground_truth.get(query, [])
+                # Get the ground truth document IDs for the query
+                expected_document_ids = ground_truth.get(query, [])
 
-                # Check if any of the retrieved chunks contain the expected phrases
-                is_correct = any(
-                    any(phrase.lower() in result[0].page_content.lower() for phrase in expected_phrases)
-                    for result in results
-                )
+                # Get the set of expected document IDs
+                expected_document_ids_set = set(expected_document_ids)
 
-                # Gather the top result for analysis
+                # Extract the document IDs from the retrieved results
+                retrieved_document_ids = set()
+                for result in results:
+                    document_id = result[0].metadata.get('document_id', '')
+                    # Remove any prefixes like 'data_test/' from 'document_id'
+                    document_id = os.path.basename(document_id)
+                    retrieved_document_ids.add(document_id)
+
+                # Check if any of the retrieved document IDs match the expected document IDs
+                is_correct = bool(retrieved_document_ids & expected_document_ids_set)
+
+                # Get the top result for analysis
                 top_result = results[0] if results else None
                 if top_result:
                     top_document_content, top_score = top_result
+                    top_document_id = os.path.basename(top_document_content.metadata.get('document_id', ''))
                     result_data = {
                         "Embedding": embedding_name,
                         "Query": query[:10],  # Shorten the query for display purposes
-                        "Top k": k,  # Store the value of k
+                        "Top k": k,
                         "Top Score": top_score,
-                        "Top Result (Snippet)": top_document_content.page_content[:10],  # Adjusted snippet length
+                        "Top Document ID": top_document_id,
                         "Correct Retrieved": is_correct,
                     }
                 else:
                     result_data = {
                         "Embedding": embedding_name,
-                        "Query": query,
-                        "Top k": k,  # Store the value of k
+                        "Query": query[:10],
+                        "Top k": k,
                         "Top Score": "N/A",
-                        "Top Result (Snippet)": "No results",
+                        "Top Document ID": "No results",
                         "Correct Retrieved": is_correct,
                     }
 
