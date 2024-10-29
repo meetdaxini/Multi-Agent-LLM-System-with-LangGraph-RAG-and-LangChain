@@ -6,11 +6,6 @@ import logging
 import gc
 from my_rag_ollama.get_embedding_function import (
     get_msmarco_embeddings,
-    get_biobert_embeddings,
-    get_bert_base_uncased_embeddings,
-    get_roberta_base_embeddings,
-    get_roberta_large_embeddings,
-    get_bert_large_nli_embeddings,
     get_mxbai_embed_large_embeddings,
 )
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
@@ -293,33 +288,6 @@ if __name__ == "__main__":
             "max_length": 32768,
         },
         {
-            "name": "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            "batch_size": 2,
-            "trust_remote_code": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            "batch_size": 2,
-            "trust_remote_code": False,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            "batch_size": 2,
-            "load_in_8bit": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "dunzhang/stella_en_1.5B_v5",
-            "batch_size": 2,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
             "name": "dunzhang/stella_en_1.5B_v5",
             "batch_size": 2,
             "trust_remote_code": True,
@@ -328,72 +296,16 @@ if __name__ == "__main__":
         },
         {
             "name": "sentence-transformers/all-MiniLM-L6-v2",
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "sentence-transformers/all-MiniLM-L6-v2",
-            "trust_remote_code": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "BioBERT",
-            "get_model_func": get_biobert_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "BERT Base Uncased",
-            "get_model_func": get_bert_base_uncased_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "query_instruction": None,
-        },
-        {
-            "name": "RoBERTa Base",
-            "get_model_func": get_roberta_base_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "query_instruction": None,
-        },
-        # {
-        #     "name": "Instructor XL",
-        #     "get_model_func": get_instructor_xl_embeddings,
-        #     "embed_document_method": "embed",
-        #     "instruction": "Represent the document for retrieval:",
-        #     "query_instruction": "Represent the question for retrieval:",
-        #     "batch_size": 16,
-        # },
-        {
-            "name": "RoBERTa Large",
-            "get_model_func": get_roberta_large_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "query_instruction": None,
-        },
-        {
-            "name": "BERT Large NLI",
-            "get_model_func": get_bert_large_nli_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "query_instruction": None,
         },
         {
             "name": "MSMARCO",
             "get_model_func": get_msmarco_embeddings,
             "embed_document_method": "embed_documents",
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
         },
         {
             "name": "mxbai embed large",
             "get_model_func": get_mxbai_embed_large_embeddings,
             "embed_document_method": "embed_documents",
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
         },
     ]
 
