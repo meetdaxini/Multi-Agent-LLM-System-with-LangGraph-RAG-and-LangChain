@@ -4,6 +4,7 @@ import torch
 from sklearn.metrics.pairwise import cosine_similarity
 import logging
 import gc
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from my_rag_ollama.get_embedding_function import (
     get_msmarco_embeddings,
     get_mxbai_embed_large_embeddings,
@@ -50,9 +51,11 @@ def create_document_embeddings(
     embed_document_method="embed_documents",
     instruction="",
     max_length=None,
+    chunk_size=1000,
+    chunk_overlap=115,
 ):
     """
-    Creates embeddings for the documents.
+    Creates embeddings for the documents, with improved chunking.
 
     Args:
         embedding_model: The embedding model to use.
@@ -62,25 +65,52 @@ def create_document_embeddings(
         batch_size (int): Batch size for embedding contexts.
         embed_document_method (str): The method name to embed documents.
         instruction (str): Instruction prefix for embedding.
+        chunk_size (int): The maximum length of each chunk (in words).
+        chunk_overlap (int): The number of overlapping words between chunks.
 
     Returns:
         Tuple[np.ndarray, List]: Document embeddings (as numpy array) and their IDs.
     """
     contexts = dataframe[context_field].tolist()
     document_ids = dataframe[doc_id_field].tolist()
+
+    chunked_texts = []
+    chunked_doc_ids = []
+
+    for context, doc_id in zip(contexts, document_ids):
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            # separator="\n",
+        )
+        chunks = text_splitter.split_text(context)
+        # if chunking_strategy == "sentence":
+        # elif chunking_strategy == "fixed":
+        #     words = context.split()
+        #     chunks = [
+        #         " ".join(words[i : i + chunk_size])
+        #         for i in range(0, len(words), chunk_size - chunk_overlap)
+        #     ]
+        # else:  # hybrid
+        #     # Implement a hybrid chunking strategy here
+        #     pass
+
+        chunked_texts.extend(chunks)
+        chunked_doc_ids.extend([doc_id] * len(chunks))
+
     log_cuda_memory_usage("Before creating context embeddings")
 
-    # TO Use the appropriate method to embed documents
+    # Use the appropriate method to embed documents
     if hasattr(embedding_model, embed_document_method):
         embed_func = getattr(embedding_model, embed_document_method)
         if instruction:
-            instruction_pairs = [f"{instruction}{text}" for text in contexts]
+            instruction_pairs = [f"{instruction}{text}" for text in chunked_texts]
             embeddings = embed_func(instruction_pairs)
         else:
-            embeddings = embed_func(contexts)
+            embeddings = embed_func(chunked_texts)
     else:
         embeddings = embedding_model.embed(
-            contexts,
+            chunked_texts,
             batch_size=batch_size,
             instruction=instruction,
             max_length=max_length,
@@ -89,15 +119,15 @@ def create_document_embeddings(
 
     torch.cuda.empty_cache()
     gc.collect()
-    log_cuda_memory_usage("After processing context batch")
+    log_cuda_memory_usage("After processing context embeddings")
 
-    return embeddings, document_ids
+    return embeddings, chunked_doc_ids
 
 
 def calculate_accuracy_at_ks(
     dataframe,
     context_embeddings,
-    document_ids,
+    chunked_doc_ids,
     embedding_model,
     max_k,
     question_field="question",
@@ -113,7 +143,7 @@ def calculate_accuracy_at_ks(
     Args:
         dataframe (pd.DataFrame): The dataset.
         context_embeddings (np.ndarray): Embeddings of the contexts (on CPU).
-        document_ids (List): IDs of the documents.
+        chunked_doc_ids (List): Document IDs corresponding to each chunk.
         embedding_model: The embedding model to use.
         max_k (int): Maximum value of K for top-K retrieval.
         question_field (str): Name of the question field.
@@ -133,6 +163,7 @@ def calculate_accuracy_at_ks(
     actual_doc_ids = dataframe[doc_id_field].tolist()
     log_cuda_memory_usage("Before calculating accuracies at Ks")
     questions = dataframe[question_field].tolist()
+
     if hasattr(embedding_model, embed_document_method):
         embed_func = getattr(embedding_model, embed_document_method)
         if query_instruction:
@@ -151,24 +182,29 @@ def calculate_accuracy_at_ks(
 
     torch.cuda.empty_cache()
     gc.collect()
-    log_cuda_memory_usage("After computing question embeddings for batch")
+    log_cuda_memory_usage("After computing question embeddings")
 
     # Compute similarities between question embeddings and context embeddings
     similarities = cosine_similarity(embeddings, context_embeddings)
 
-    # Get indices of top max_k similar contexts for each question in the batch
+    # Get indices of top max_k similar contexts for each question
     top_k_indices = np.argsort(similarities, axis=1)[:, -max_k:][:, ::-1]
 
     # Map indices to document IDs
-    top_k_doc_ids = [
-        [document_ids[idx] for idx in indices] for indices in top_k_indices
-    ]
+    top_k_doc_ids_per_query = []
+    for indices in top_k_indices:
+        retrieved_doc_ids = [chunked_doc_ids[idx] for idx in indices]
+        top_k_doc_ids_per_query.append(retrieved_doc_ids)
 
     # Evaluate accuracies for each K
     for idx_in_batch, actual_doc_id in enumerate(actual_doc_ids):
-        retrieved_doc_ids = top_k_doc_ids[idx_in_batch]
+        retrieved_doc_ids = top_k_doc_ids_per_query[idx_in_batch]
+        unique_retrieved_doc_ids = []
+        for doc_id in retrieved_doc_ids:
+            if doc_id not in unique_retrieved_doc_ids:
+                unique_retrieved_doc_ids.append(doc_id)
         for k in ks:
-            if actual_doc_id in retrieved_doc_ids[:k]:
+            if actual_doc_id in unique_retrieved_doc_ids[:k]:
                 correct_counts[k] += 1
 
     del embeddings
@@ -211,6 +247,7 @@ def run_evaluation(models, datasets, max_k):
             )
             instruction = model_info.get("instruction", None)
             query_instruction = model_info.get("query_instruction", None)
+            # chunking_strategy = model_info.get("chunking_strategy", "sentence")
 
             logger.info(f"Evaluating model: {model_name}")
             try:
@@ -238,6 +275,7 @@ def run_evaluation(models, datasets, max_k):
                 batch_size=batch_size,
                 embed_document_method=embed_document_method,
                 instruction=instruction,
+                # chunking_strategy=chunking_strategy,
             )
 
             # Calculate accuracies for all Ks at once
@@ -261,6 +299,7 @@ def run_evaluation(models, datasets, max_k):
                     "query_instruction": query_instruction,
                     "load_in_8bit": model_info.get("load_in_8bit", False),
                     "trust_remote_code": model_info.get("trust_remote_code", False),
+                    # "chunking_strategy": chunking_strategy,
                 },
             }
             for K in range(1, max_k + 1):
@@ -280,7 +319,7 @@ if __name__ == "__main__":
     models = [
         {
             "name": "nvidia/NV-Embed-v2",
-            "batch_size": 1,
+            "batch_size": 5,
             "trust_remote_code": True,
             "load_in_8bit": True,
             "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
@@ -289,13 +328,15 @@ if __name__ == "__main__":
         },
         {
             "name": "dunzhang/stella_en_1.5B_v5",
-            "batch_size": 2,
+            "batch_size": 40,
             "trust_remote_code": True,
             "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
             "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
         },
         {
             "name": "sentence-transformers/all-MiniLM-L6-v2",
+            "batch_size": 100,
+            # "chunking_strategy": "sentence",
         },
         {
             "name": "MSMARCO",
@@ -306,6 +347,7 @@ if __name__ == "__main__":
             "name": "mxbai embed large",
             "get_model_func": get_mxbai_embed_large_embeddings,
             "embed_document_method": "embed_documents",
+            "instruction": "Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
         },
     ]
 
