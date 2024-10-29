@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import torch
-from sklearn.metrics.pairwise import cosine_similarity
 import logging
 import gc
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -10,11 +9,80 @@ from my_rag_ollama.get_embedding_function import (
     get_mxbai_embed_large_embeddings,
 )
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
-import logging
-import gc
+import chromadb
+import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def alphanumeric_string(input_string):
+    return re.sub(r"[^a-zA-Z0-9]", "", input_string)
+
+
+class ChromaDBHandler:
+    """
+    A handler class for ChromaDB operations.
+    """
+
+    def __init__(self, collection_name, host="localhost", port=8000):
+        """
+        Initializes the ChromaDB client and creates a collection.
+
+        Args:
+            collection_name (str): Name of the collection.
+            host (str): Host of the ChromaDB server.
+            port (int): Port of the ChromaDB server.
+        """
+        self.collection_name = collection_name
+        self.client = chromadb.HttpClient(host=host, port=port)
+        # Delete existing collection with the same name
+        # self.client.delete_collection(name=collection_name)
+        self.collection = self.client.create_collection(
+            name=collection_name, metadata={"hnsw:space": "l2"}
+        )
+
+    def add_embeddings(self, embeddings, documents, metadatas, ids):
+        """
+        Adds embeddings to the collection.
+
+        Args:
+            embeddings (List[List[float]]): Embeddings to add.
+            documents (List[str]): List of documents.
+            metadatas (List[Dict]): List of metadatas.
+            ids (List[str]): List of document IDs.
+        """
+        self.collection.add(
+            embeddings=embeddings,
+            documents=documents,
+            metadatas=metadatas,
+            ids=ids,
+        )
+
+    def query(self, query_embeddings, n_results, include=["metadatas"]):
+        """
+        Queries the collection.
+
+        Args:
+            query_embeddings (List[List[float]]): Query embeddings.
+            n_results (int): Number of results to return.
+            include (List[str]): What to include in the results.
+
+        Returns:
+            Dict: Query results.
+        """
+        results = self.collection.query(
+            query_embeddings=query_embeddings,
+            n_results=n_results,
+            include=include,
+        )
+        return results
+
+    def delete_collection(self):
+        """
+        Deletes the collection.
+        """
+        self.client.delete_collection(name=self.collection_name)
 
 
 def log_cuda_memory_usage(message=""):
@@ -69,7 +137,7 @@ def create_document_embeddings(
         chunk_overlap (int): The number of overlapping words between chunks.
 
     Returns:
-        Tuple[np.ndarray, List]: Document embeddings (as numpy array) and their IDs.
+        Tuple[List[str], List, np.ndarray]: chunked_texts, chunked_doc_ids, embeddings (as numpy array).
     """
     contexts = dataframe[context_field].tolist()
     document_ids = dataframe[doc_id_field].tolist()
@@ -81,19 +149,8 @@ def create_document_embeddings(
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            # separator="\n",
         )
         chunks = text_splitter.split_text(context)
-        # if chunking_strategy == "sentence":
-        # elif chunking_strategy == "fixed":
-        #     words = context.split()
-        #     chunks = [
-        #         " ".join(words[i : i + chunk_size])
-        #         for i in range(0, len(words), chunk_size - chunk_overlap)
-        #     ]
-        # else:  # hybrid
-        #     # Implement a hybrid chunking strategy here
-        #     pass
 
         chunked_texts.extend(chunks)
         chunked_doc_ids.extend([doc_id] * len(chunks))
@@ -121,14 +178,13 @@ def create_document_embeddings(
     gc.collect()
     log_cuda_memory_usage("After processing context embeddings")
 
-    return embeddings, chunked_doc_ids
+    return chunked_texts, chunked_doc_ids, embeddings
 
 
 def calculate_accuracy_at_ks(
     dataframe,
-    context_embeddings,
-    chunked_doc_ids,
     embedding_model,
+    chromadb_handler,
     max_k,
     question_field="question",
     doc_id_field="source_doc",
@@ -138,13 +194,12 @@ def calculate_accuracy_at_ks(
     max_length=None,
 ):
     """
-    Calculates retrieval accuracy for Ks from 1 to max_k.
+    Calculates retrieval accuracy for Ks from 1 to max_k using ChromaDB.
 
     Args:
         dataframe (pd.DataFrame): The dataset.
-        context_embeddings (np.ndarray): Embeddings of the contexts (on CPU).
-        chunked_doc_ids (List): Document IDs corresponding to each chunk.
         embedding_model: The embedding model to use.
+        chromadb_handler: Instance of ChromaDBHandler.
         max_k (int): Maximum value of K for top-K retrieval.
         question_field (str): Name of the question field.
         doc_id_field (str): Name of the document ID field.
@@ -184,21 +239,17 @@ def calculate_accuracy_at_ks(
     gc.collect()
     log_cuda_memory_usage("After computing question embeddings")
 
-    # Compute similarities between question embeddings and context embeddings
-    similarities = cosine_similarity(embeddings, context_embeddings)
-
-    # Get indices of top max_k similar contexts for each question
-    top_k_indices = np.argsort(similarities, axis=1)[:, -max_k:][:, ::-1]
-
-    # Map indices to document IDs
-    top_k_doc_ids_per_query = []
-    for indices in top_k_indices:
-        retrieved_doc_ids = [chunked_doc_ids[idx] for idx in indices]
-        top_k_doc_ids_per_query.append(retrieved_doc_ids)
+    # Query ChromaDB with the query embeddings
+    results = chromadb_handler.query(
+        query_embeddings=embeddings,
+        n_results=max_k,
+    )
 
     # Evaluate accuracies for each K
     for idx_in_batch, actual_doc_id in enumerate(actual_doc_ids):
-        retrieved_doc_ids = top_k_doc_ids_per_query[idx_in_batch]
+        retrieved_metadatas = results["metadatas"][idx_in_batch]
+        retrieved_doc_ids = [metadata["doc_id"] for metadata in retrieved_metadatas]
+
         unique_retrieved_doc_ids = []
         for doc_id in retrieved_doc_ids:
             if doc_id not in unique_retrieved_doc_ids:
@@ -208,7 +259,6 @@ def calculate_accuracy_at_ks(
                 correct_counts[k] += 1
 
     del embeddings
-    del similarities
     torch.cuda.empty_cache()
     gc.collect()
     log_cuda_memory_usage("After processing batch")
@@ -247,7 +297,6 @@ def run_evaluation(models, datasets, max_k):
             )
             instruction = model_info.get("instruction", None)
             query_instruction = model_info.get("query_instruction", None)
-            # chunking_strategy = model_info.get("chunking_strategy", "sentence")
 
             logger.info(f"Evaluating model: {model_name}")
             try:
@@ -267,23 +316,42 @@ def run_evaluation(models, datasets, max_k):
             except Exception as e:
                 logger.error(f"Failed to load model {model_name}: {e}")
                 continue
-            context_embeddings, document_ids = create_document_embeddings(
-                embedding_model,
-                df,
-                context_field,
-                doc_id_field,
-                batch_size=batch_size,
-                embed_document_method=embed_document_method,
-                instruction=instruction,
-                # chunking_strategy=chunking_strategy,
+
+            chunked_texts, document_ids, context_embeddings = (
+                create_document_embeddings(
+                    embedding_model,
+                    df,
+                    context_field,
+                    doc_id_field,
+                    batch_size=batch_size,
+                    embed_document_method=embed_document_method,
+                    instruction=instruction,
+                )
+            )
+
+            # Create unique IDs for each chunk
+            ids = [f"{doc_id}_{idx}" for idx, doc_id in enumerate(document_ids)]
+            # Create metadatas
+            metadatas = [{"doc_id": doc_id} for doc_id in document_ids]
+
+            # Initialize ChromaDBHandler
+            chromadb_handler = ChromaDBHandler(
+                collection_name=alphanumeric_string(model_name)
+            )
+
+            # Add embeddings to ChromaDB
+            chromadb_handler.add_embeddings(
+                embeddings=context_embeddings,
+                documents=chunked_texts,
+                metadatas=metadatas,
+                ids=ids,
             )
 
             # Calculate accuracies for all Ks at once
             accuracies = calculate_accuracy_at_ks(
                 df,
-                context_embeddings,
-                document_ids,
                 embedding_model,
+                chromadb_handler,
                 max_k,
                 question_field,
                 doc_id_field,
@@ -291,6 +359,10 @@ def run_evaluation(models, datasets, max_k):
                 embed_document_method=embed_document_method,
                 query_instruction=query_instruction,
             )
+
+            # Delete the collection
+            chromadb_handler.delete_collection()
+
             result = {
                 "model": model_name,
                 "dataset": dataset_path,
@@ -299,7 +371,6 @@ def run_evaluation(models, datasets, max_k):
                     "query_instruction": query_instruction,
                     "load_in_8bit": model_info.get("load_in_8bit", False),
                     "trust_remote_code": model_info.get("trust_remote_code", False),
-                    # "chunking_strategy": chunking_strategy,
                 },
             }
             for K in range(1, max_k + 1):
@@ -336,7 +407,6 @@ if __name__ == "__main__":
         {
             "name": "sentence-transformers/all-MiniLM-L6-v2",
             "batch_size": 100,
-            # "chunking_strategy": "sentence",
         },
         {
             "name": "MSMARCO",
