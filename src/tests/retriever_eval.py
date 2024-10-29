@@ -1,24 +1,88 @@
 import pandas as pd
 import numpy as np
 import torch
-from sklearn.metrics.pairwise import cosine_similarity
 import logging
 import gc
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from my_rag_ollama.get_embedding_function import (
     get_msmarco_embeddings,
-    get_biobert_embeddings,
-    get_bert_base_uncased_embeddings,
-    get_roberta_base_embeddings,
-    get_roberta_large_embeddings,
-    get_bert_large_nli_embeddings,
     get_mxbai_embed_large_embeddings,
 )
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
-import logging
-import gc
+import chromadb
+import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def alphanumeric_string(input_string):
+    return re.sub(r"[^a-zA-Z0-9]", "", input_string)
+
+
+class ChromaDBHandler:
+    """
+    A handler class for ChromaDB operations.
+    """
+
+    def __init__(self, collection_name, host="localhost", port=8000):
+        """
+        Initializes the ChromaDB client and creates a collection.
+
+        Args:
+            collection_name (str): Name of the collection.
+            host (str): Host of the ChromaDB server.
+            port (int): Port of the ChromaDB server.
+        """
+        self.collection_name = collection_name
+        self.client = chromadb.HttpClient(host=host, port=port)
+        # Delete existing collection with the same name
+        # self.client.delete_collection(name=collection_name)
+        self.collection = self.client.create_collection(
+            name=collection_name, metadata={"hnsw:space": "l2"}
+        )
+
+    def add_embeddings(self, embeddings, documents, metadatas, ids):
+        """
+        Adds embeddings to the collection.
+
+        Args:
+            embeddings (List[List[float]]): Embeddings to add.
+            documents (List[str]): List of documents.
+            metadatas (List[Dict]): List of metadatas.
+            ids (List[str]): List of document IDs.
+        """
+        self.collection.add(
+            embeddings=embeddings,
+            documents=documents,
+            metadatas=metadatas,
+            ids=ids,
+        )
+
+    def query(self, query_embeddings, n_results, include=["metadatas"]):
+        """
+        Queries the collection.
+
+        Args:
+            query_embeddings (List[List[float]]): Query embeddings.
+            n_results (int): Number of results to return.
+            include (List[str]): What to include in the results.
+
+        Returns:
+            Dict: Query results.
+        """
+        results = self.collection.query(
+            query_embeddings=query_embeddings,
+            n_results=n_results,
+            include=include,
+        )
+        return results
+
+    def delete_collection(self):
+        """
+        Deletes the collection.
+        """
+        self.client.delete_collection(name=self.collection_name)
 
 
 def log_cuda_memory_usage(message=""):
@@ -55,9 +119,11 @@ def create_document_embeddings(
     embed_document_method="embed_documents",
     instruction="",
     max_length=None,
+    chunk_size=1000,
+    chunk_overlap=115,
 ):
     """
-    Creates embeddings for the documents.
+    Creates embeddings for the documents, with improved chunking.
 
     Args:
         embedding_model: The embedding model to use.
@@ -67,25 +133,41 @@ def create_document_embeddings(
         batch_size (int): Batch size for embedding contexts.
         embed_document_method (str): The method name to embed documents.
         instruction (str): Instruction prefix for embedding.
+        chunk_size (int): The maximum length of each chunk (in words).
+        chunk_overlap (int): The number of overlapping words between chunks.
 
     Returns:
-        Tuple[np.ndarray, List]: Document embeddings (as numpy array) and their IDs.
+        Tuple[List[str], List, np.ndarray]: chunked_texts, chunked_doc_ids, embeddings (as numpy array).
     """
     contexts = dataframe[context_field].tolist()
     document_ids = dataframe[doc_id_field].tolist()
+
+    chunked_texts = []
+    chunked_doc_ids = []
+
+    for context, doc_id in zip(contexts, document_ids):
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+        chunks = text_splitter.split_text(context)
+
+        chunked_texts.extend(chunks)
+        chunked_doc_ids.extend([doc_id] * len(chunks))
+
     log_cuda_memory_usage("Before creating context embeddings")
 
-    # TO Use the appropriate method to embed documents
+    # Use the appropriate method to embed documents
     if hasattr(embedding_model, embed_document_method):
         embed_func = getattr(embedding_model, embed_document_method)
         if instruction:
-            instruction_pairs = [f"{instruction}{text}" for text in contexts]
+            instruction_pairs = [f"{instruction}{text}" for text in chunked_texts]
             embeddings = embed_func(instruction_pairs)
         else:
-            embeddings = embed_func(contexts)
+            embeddings = embed_func(chunked_texts)
     else:
         embeddings = embedding_model.embed(
-            contexts,
+            chunked_texts,
             batch_size=batch_size,
             instruction=instruction,
             max_length=max_length,
@@ -94,16 +176,15 @@ def create_document_embeddings(
 
     torch.cuda.empty_cache()
     gc.collect()
-    log_cuda_memory_usage("After processing context batch")
+    log_cuda_memory_usage("After processing context embeddings")
 
-    return embeddings, document_ids
+    return chunked_texts, chunked_doc_ids, embeddings
 
 
 def calculate_accuracy_at_ks(
     dataframe,
-    context_embeddings,
-    document_ids,
     embedding_model,
+    chromadb_handler,
     max_k,
     question_field="question",
     doc_id_field="source_doc",
@@ -113,13 +194,12 @@ def calculate_accuracy_at_ks(
     max_length=None,
 ):
     """
-    Calculates retrieval accuracy for Ks from 1 to max_k.
+    Calculates retrieval accuracy for Ks from 1 to max_k using ChromaDB.
 
     Args:
         dataframe (pd.DataFrame): The dataset.
-        context_embeddings (np.ndarray): Embeddings of the contexts (on CPU).
-        document_ids (List): IDs of the documents.
         embedding_model: The embedding model to use.
+        chromadb_handler: Instance of ChromaDBHandler.
         max_k (int): Maximum value of K for top-K retrieval.
         question_field (str): Name of the question field.
         doc_id_field (str): Name of the document ID field.
@@ -138,6 +218,7 @@ def calculate_accuracy_at_ks(
     actual_doc_ids = dataframe[doc_id_field].tolist()
     log_cuda_memory_usage("Before calculating accuracies at Ks")
     questions = dataframe[question_field].tolist()
+
     if hasattr(embedding_model, embed_document_method):
         embed_func = getattr(embedding_model, embed_document_method)
         if query_instruction:
@@ -156,28 +237,28 @@ def calculate_accuracy_at_ks(
 
     torch.cuda.empty_cache()
     gc.collect()
-    log_cuda_memory_usage("After computing question embeddings for batch")
+    log_cuda_memory_usage("After computing question embeddings")
 
-    # Compute similarities between question embeddings and context embeddings
-    similarities = cosine_similarity(embeddings, context_embeddings)
-
-    # Get indices of top max_k similar contexts for each question in the batch
-    top_k_indices = np.argsort(similarities, axis=1)[:, -max_k:][:, ::-1]
-
-    # Map indices to document IDs
-    top_k_doc_ids = [
-        [document_ids[idx] for idx in indices] for indices in top_k_indices
-    ]
+    # Query ChromaDB with the query embeddings
+    results = chromadb_handler.query(
+        query_embeddings=embeddings,
+        n_results=max_k,
+    )
 
     # Evaluate accuracies for each K
     for idx_in_batch, actual_doc_id in enumerate(actual_doc_ids):
-        retrieved_doc_ids = top_k_doc_ids[idx_in_batch]
+        retrieved_metadatas = results["metadatas"][idx_in_batch]
+        retrieved_doc_ids = [metadata["doc_id"] for metadata in retrieved_metadatas]
+
+        unique_retrieved_doc_ids = []
+        for doc_id in retrieved_doc_ids:
+            if doc_id not in unique_retrieved_doc_ids:
+                unique_retrieved_doc_ids.append(doc_id)
         for k in ks:
-            if actual_doc_id in retrieved_doc_ids[:k]:
+            if actual_doc_id in unique_retrieved_doc_ids[:k]:
                 correct_counts[k] += 1
 
     del embeddings
-    del similarities
     torch.cuda.empty_cache()
     gc.collect()
     log_cuda_memory_usage("After processing batch")
@@ -235,22 +316,42 @@ def run_evaluation(models, datasets, max_k):
             except Exception as e:
                 logger.error(f"Failed to load model {model_name}: {e}")
                 continue
-            context_embeddings, document_ids = create_document_embeddings(
-                embedding_model,
-                df,
-                context_field,
-                doc_id_field,
-                batch_size=batch_size,
-                embed_document_method=embed_document_method,
-                instruction=instruction,
+
+            chunked_texts, document_ids, context_embeddings = (
+                create_document_embeddings(
+                    embedding_model,
+                    df,
+                    context_field,
+                    doc_id_field,
+                    batch_size=batch_size,
+                    embed_document_method=embed_document_method,
+                    instruction=instruction,
+                )
+            )
+
+            # Create unique IDs for each chunk
+            ids = [f"{doc_id}_{idx}" for idx, doc_id in enumerate(document_ids)]
+            # Create metadatas
+            metadatas = [{"doc_id": doc_id} for doc_id in document_ids]
+
+            # Initialize ChromaDBHandler
+            chromadb_handler = ChromaDBHandler(
+                collection_name=alphanumeric_string(model_name)
+            )
+
+            # Add embeddings to ChromaDB
+            chromadb_handler.add_embeddings(
+                embeddings=context_embeddings,
+                documents=chunked_texts,
+                metadatas=metadatas,
+                ids=ids,
             )
 
             # Calculate accuracies for all Ks at once
             accuracies = calculate_accuracy_at_ks(
                 df,
-                context_embeddings,
-                document_ids,
                 embedding_model,
+                chromadb_handler,
                 max_k,
                 question_field,
                 doc_id_field,
@@ -258,6 +359,10 @@ def run_evaluation(models, datasets, max_k):
                 embed_document_method=embed_document_method,
                 query_instruction=query_instruction,
             )
+
+            # Delete the collection
+            chromadb_handler.delete_collection()
+
             result = {
                 "model": model_name,
                 "dataset": dataset_path,
@@ -285,7 +390,7 @@ if __name__ == "__main__":
     models = [
         {
             "name": "nvidia/NV-Embed-v2",
-            "batch_size": 1,
+            "batch_size": 5,
             "trust_remote_code": True,
             "load_in_8bit": True,
             "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
@@ -293,107 +398,26 @@ if __name__ == "__main__":
             "max_length": 32768,
         },
         {
-            "name": "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            "batch_size": 2,
-            "trust_remote_code": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            "batch_size": 2,
-            "trust_remote_code": False,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            "batch_size": 2,
-            "load_in_8bit": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
             "name": "dunzhang/stella_en_1.5B_v5",
-            "batch_size": 2,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "dunzhang/stella_en_1.5B_v5",
-            "batch_size": 2,
+            "batch_size": 40,
             "trust_remote_code": True,
             "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
             "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
         },
         {
             "name": "sentence-transformers/all-MiniLM-L6-v2",
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "sentence-transformers/all-MiniLM-L6-v2",
-            "trust_remote_code": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "BioBERT",
-            "get_model_func": get_biobert_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
-        {
-            "name": "BERT Base Uncased",
-            "get_model_func": get_bert_base_uncased_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "query_instruction": None,
-        },
-        {
-            "name": "RoBERTa Base",
-            "get_model_func": get_roberta_base_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "query_instruction": None,
-        },
-        # {
-        #     "name": "Instructor XL",
-        #     "get_model_func": get_instructor_xl_embeddings,
-        #     "embed_document_method": "embed",
-        #     "instruction": "Represent the document for retrieval:",
-        #     "query_instruction": "Represent the question for retrieval:",
-        #     "batch_size": 16,
-        # },
-        {
-            "name": "RoBERTa Large",
-            "get_model_func": get_roberta_large_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "query_instruction": None,
-        },
-        {
-            "name": "BERT Large NLI",
-            "get_model_func": get_bert_large_nli_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": None,
-            "query_instruction": None,
+            "batch_size": 100,
         },
         {
             "name": "MSMARCO",
             "get_model_func": get_msmarco_embeddings,
             "embed_document_method": "embed_documents",
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
         },
         {
             "name": "mxbai embed large",
             "get_model_func": get_mxbai_embed_large_embeddings,
             "embed_document_method": "embed_documents",
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
+            "instruction": "Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
         },
     ]
 
