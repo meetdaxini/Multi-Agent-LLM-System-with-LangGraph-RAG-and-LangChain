@@ -9,8 +9,12 @@ from my_rag_ollama.get_embedding_function import (
     get_mxbai_embed_large_embeddings,
 )
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
+from my_rag.components.llms.huggingface_llm import HuggingFaceLLM
 import chromadb
 import re
+
+from typing import Optional, Dict
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,11 +40,8 @@ class ChromaDBHandler:
         """
         self.collection_name = collection_name
         self.client = chromadb.HttpClient(host=host, port=port)
-        # Delete existing collection with the same name
-        # self.client.delete_collection(name=collection_name)
-        self.collection = self.client.create_collection(
-            name=collection_name, metadata={"hnsw:space": "cosine"}
-        )
+        self.client.delete_collection(name=collection_name)
+        self.collection = self.client.create_collection(name=collection_name)
 
     def add_embeddings(self, embeddings, documents, metadatas, ids):
         """
@@ -59,7 +60,7 @@ class ChromaDBHandler:
             ids=ids,
         )
 
-    def query(self, query_embeddings, n_results, include=["metadatas"]):
+    def query(self, query_embeddings, n_results, include=["documents", "metadatas"]):
         """
         Queries the collection.
 
@@ -181,11 +182,13 @@ def create_document_embeddings(
     return chunked_texts, chunked_doc_ids, embeddings
 
 
-def calculate_accuracy_at_ks(
+def generate_answers(
     dataframe,
     embedding_model,
     chromadb_handler,
-    max_k,
+    llm,
+    k,
+    context_field="context",
     question_field="question",
     doc_id_field="source_doc",
     batch_size=32,
@@ -194,13 +197,15 @@ def calculate_accuracy_at_ks(
     max_length=None,
 ):
     """
-    Calculates retrieval accuracy for Ks from 1 to max_k using ChromaDB.
+    Generates answers for each question using the retrieved contexts.
 
     Args:
         dataframe (pd.DataFrame): The dataset.
         embedding_model: The embedding model to use.
         chromadb_handler: Instance of ChromaDBHandler.
-        max_k (int): Maximum value of K for top-K retrieval.
+        llm: Instance of HuggingFaceLLM.
+        k (int): Number of contexts to retrieve.
+        context_field (str): Name of the context field.
         question_field (str): Name of the question field.
         doc_id_field (str): Name of the document ID field.
         batch_size (int): Batch size for processing questions.
@@ -208,17 +213,15 @@ def calculate_accuracy_at_ks(
         query_instruction (str): Instruction prefix for query embedding.
 
     Returns:
-        Dict[int, float]: Dictionary mapping K to accuracy at K.
+        pd.DataFrame: DataFrame with answers and retrieved contexts.
     """
-    total = len(dataframe)
-    ks = range(1, max_k + 1)
-    correct_counts = {k: 0 for k in ks}
-
-    # Get list of actual doc IDs
-    actual_doc_ids = dataframe[doc_id_field].tolist()
-    log_cuda_memory_usage("Before calculating accuracies at Ks")
     questions = dataframe[question_field].tolist()
+    actual_doc_ids = dataframe[doc_id_field].tolist()
+    answers = []
+    retrieved_contexts_list = []
+    retrieved_doc_ids_list = []
 
+    # Embed the questions
     if hasattr(embedding_model, embed_document_method):
         embed_func = getattr(embedding_model, embed_document_method)
         if query_instruction:
@@ -235,53 +238,63 @@ def calculate_accuracy_at_ks(
         )
         embeddings = embeddings.cpu().numpy()
 
-    torch.cuda.empty_cache()
-    gc.collect()
-    log_cuda_memory_usage("After computing question embeddings")
-
-    # Query ChromaDB with the query embeddings
+    # Query ChromaDB with the question embeddings
     results = chromadb_handler.query(
-        query_embeddings=embeddings,
-        n_results=max_k,
+        query_embeddings=embeddings.tolist(),
+        n_results=k,
     )
 
-    # Evaluate accuracies for each K
-    for idx_in_batch, actual_doc_id in enumerate(actual_doc_ids):
-        retrieved_metadatas = results["metadatas"][idx_in_batch]
-        retrieved_doc_ids = [metadata["doc_id"] for metadata in retrieved_metadatas]
+    # For each question, generate an answer using the retrieved contexts
+    for idx in range(len(questions)):
+        question = questions[idx]
+        retrieved_documents = results["documents"][idx]
+        retrieved_metadatas = results["metadatas"][idx]
+        retrieved_doc_ids = [meta["doc_id"] for meta in retrieved_metadatas]
+        retrieved_contexts = "\n\n".join(retrieved_documents)
 
-        unique_retrieved_doc_ids = []
-        for doc_id in retrieved_doc_ids:
-            if doc_id not in unique_retrieved_doc_ids:
-                unique_retrieved_doc_ids.append(doc_id)
-        for k in ks:
-            if actual_doc_id in unique_retrieved_doc_ids[:k]:
-                correct_counts[k] += 1
+        # Generate answer using the LLM
+        answer = llm.generate_response_with_context(
+            context=retrieved_contexts,
+            prompt=question,
+            max_length=512,  # You can adjust this value
+            temperature=0.7,  # You can adjust this value
+            top_p=0.9,  # You can adjust this value
+        )
 
-    del embeddings
-    torch.cuda.empty_cache()
-    gc.collect()
-    log_cuda_memory_usage("After processing batch")
+        answers.append(answer)
+        retrieved_contexts_list.append(retrieved_contexts)
+        retrieved_doc_ids_list.append(retrieved_doc_ids)
 
-    # Calculate accuracy for each K
-    accuracies = {k: correct_counts[k] / total for k in ks}
-    log_cuda_memory_usage("After calculating accuracies at Ks")
-    return accuracies
+    # Add the answers and retrieved contexts to the dataframe
+    dataframe["Retrieved_Doc_IDs"] = retrieved_doc_ids_list
+    dataframe["Retrieved_Contexts"] = retrieved_contexts_list
+    dataframe["LLM_Answer"] = answers
+
+    return dataframe
 
 
-def run_evaluation(models, datasets, max_k):
+def run_evaluation(models, datasets, k):
     """
     Runs the evaluation over multiple models and datasets.
 
     Args:
         models (List[Dict]): List of models with settings.
         datasets (List[Dict]): List of dataset configurations.
-        max_k: max K value for top-K retrieval.
+        k (int): Number of contexts to retrieve.
 
     Returns:
-        List[Dict]: List of results.
+        None
     """
-    results = []
+    # Initialize the LLM
+    llm = HuggingFaceLLM(
+        model_name="meta-llama/Meta-Llama-3-8B-Instruct",
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        torch_dtype=torch.float16,
+        load_in_8bit=True,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+
     for dataset_info in datasets:
         dataset_path = dataset_info["path"]
         context_field = dataset_info.get("context_field", "context")
@@ -297,6 +310,7 @@ def run_evaluation(models, datasets, max_k):
             )
             instruction = model_info.get("instruction", None)
             query_instruction = model_info.get("query_instruction", None)
+            max_length = model_info.get("max_length", None)
 
             logger.info(f"Evaluating model: {model_name}")
             try:
@@ -317,16 +331,18 @@ def run_evaluation(models, datasets, max_k):
                 logger.error(f"Failed to load model {model_name}: {e}")
                 continue
 
-            chunked_texts, document_ids, context_embeddings = (
-                create_document_embeddings(
-                    embedding_model,
-                    df,
-                    context_field,
-                    doc_id_field,
-                    batch_size=batch_size,
-                    embed_document_method=embed_document_method,
-                    instruction=instruction,
-                )
+            (
+                chunked_texts,
+                document_ids,
+                context_embeddings,
+            ) = create_document_embeddings(
+                embedding_model,
+                df,
+                context_field,
+                doc_id_field,
+                batch_size=batch_size,
+                embed_document_method=embed_document_method,
+                instruction=instruction,
             )
 
             # Create unique IDs for each chunk
@@ -347,78 +363,73 @@ def run_evaluation(models, datasets, max_k):
                 ids=ids,
             )
 
-            # Calculate accuracies for all Ks at once
-            accuracies = calculate_accuracy_at_ks(
+            # Generate answers and update the dataframe
+            df_with_answers = generate_answers(
                 df,
                 embedding_model,
                 chromadb_handler,
-                max_k,
-                question_field,
-                doc_id_field,
+                llm,
+                k,
+                context_field=context_field,
+                question_field=question_field,
+                doc_id_field=doc_id_field,
                 batch_size=batch_size,
                 embed_document_method=embed_document_method,
                 query_instruction=query_instruction,
+                max_length=max_length,
             )
 
             # Delete the collection
             chromadb_handler.delete_collection()
 
-            result = {
-                "model": model_name,
-                "dataset": dataset_path,
-                "settings": {
-                    "instruction": instruction,
-                    "query_instruction": query_instruction,
-                    "load_in_8bit": model_info.get("load_in_8bit", False),
-                    "trust_remote_code": model_info.get("trust_remote_code", False),
-                },
-            }
-            for K in range(1, max_k + 1):
-                accuracy = accuracies[K]
-                result[f"Accuracy@k={K}"] = round(accuracy * 100, 2)
-                logger.info(f"{model_name} - K={K}, Accuracy: {accuracy * 100:.2f}%")
-            results.append(result)
+            # Save the dataframe to Excel
+            output_filename = f"retriever_eval_{model_name.replace('/', '_')}.xlsx"
+            df_with_answers.to_excel(output_filename, index=False)
+            logger.info(f"Results saved to {output_filename}")
+
             if hasattr(embedding_model, "clean_up"):
                 embedding_model.clean_up()
             log_cuda_memory_usage("After cleaning up embedding model")
             torch.cuda.empty_cache()
             gc.collect()
-    return results
+
+    # Clean up LLM
+    llm.clean_up()
 
 
 if __name__ == "__main__":
     models = [
-        {
-            "name": "nvidia/NV-Embed-v2",
-            "batch_size": 5,
-            "trust_remote_code": True,
-            "load_in_8bit": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-            "max_length": 32768,
-        },
-        {
-            "name": "dunzhang/stella_en_1.5B_v5",
-            "batch_size": 40,
-            "trust_remote_code": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
+        # {
+        #     "name": "nvidia/NV-Embed-v2",
+        #     "batch_size": 5,
+        #     "trust_remote_code": True,
+        #     "load_in_8bit": True,
+        #     "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
+        #     "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
+        #     "max_length": 32768,
+        # },
+        # {
+        #     "name": "dunzhang/stella_en_1.5B_v5",
+        #     "batch_size": 40,
+        #     "trust_remote_code": True,
+        #     "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
+        #     "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
+        # },
         {
             "name": "sentence-transformers/all-MiniLM-L6-v2",
             "batch_size": 100,
         },
-        {
-            "name": "MSMARCO",
-            "get_model_func": get_msmarco_embeddings,
-            "embed_document_method": "embed_documents",
-        },
-        {
-            "name": "mxbai embed large",
-            "get_model_func": get_mxbai_embed_large_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": "Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-        },
+        # {
+        #     "name": "MSMARCO",
+        #     "get_model_func": get_msmarco_embeddings,
+        #     "embed_document_method": "embed_documents",
+        # },
+        # {
+        #     "name": "mxbai embed large",
+        #     "get_model_func": get_mxbai_embed_large_embeddings,
+        #     "embed_document_method": "embed_documents",
+        #     "instruction": "Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
+        # },
     ]
 
     datasets = [
@@ -430,9 +441,5 @@ if __name__ == "__main__":
         },
     ]
 
-    max_k = 5
-    results = run_evaluation(models, datasets, max_k)
-    results_df = pd.DataFrame(results)
-    accuracy_columns = [f"Accuracy@k={k}" for k in range(1, max_k + 1)]
-    results_df = results_df[["model", "dataset", "settings"] + accuracy_columns]
-    results_df.to_excel("retriever_eval.xlsx", index=False)
+    k = 5
+    run_evaluation(models, datasets, k)
