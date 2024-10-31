@@ -157,7 +157,9 @@ class ChromaDBHandler:
         )
         logger.info(f"Added {len(embeddings)} embeddings to the ChromaDB collection: {self.collection_name}")
 
-    def query(self, query_embeddings, n_results, include=["documents", "metadatas"]):
+    def query(self, query_embeddings, n_results, include=None):
+        if include is None:
+            include = ["documents", "metadatas"]
         results = self.collection.query(
             query_embeddings=query_embeddings,
             n_results=n_results,
@@ -410,7 +412,7 @@ def run_evaluation(models, datasets, k):
 
 if __name__ == "__main__":
     # Load your dataset
-    df = load_dataset()  # Ensure your PDFs are in the 'data_test' directory
+    df = load_dataset()
 
     # Initialize your embedding model
     embedding_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -418,7 +420,12 @@ if __name__ == "__main__":
     # Create document embeddings
     chunked_texts, document_ids, context_embeddings = create_document_embeddings(
         embedding_model=embedding_model,
-        dataframe=df
+        dataframe=df,
+        context_field="context",
+        doc_id_field="source_doc",
+        batch_size=32,
+        chunk_size=1000,
+        chunk_overlap=115
     )
 
     # Generate IDs and metadata for the embeddings
@@ -458,15 +465,20 @@ if __name__ == "__main__":
     ]
 
     # Generate answers for the list of questions
-    results = process_questions_in_batches(questions, embedding_model, chromadb_handler, llm, k=7)
+    results = process_questions_in_batches(
+        questions,
+        embedding_model,
+        chromadb_handler,
+        llm,
+        k=5,
+        batch_size=8
+
+    )
+
+    # Print the results
     for i, result in enumerate(results, start=1):
         print(f"{i}. Question: {result['question']}")
         print(f"{i}. Answer: {result['answer']}\n")
-
-    # for result in results:
-    #     print(f"Question: {result['question']}")
-    #     # print(f"Retrieved Documents: {result['retrieved_documents']}")
-    #     print(f"Answer: {result['answer']}\n")
 
 
 
