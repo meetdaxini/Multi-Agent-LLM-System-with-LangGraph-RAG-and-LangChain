@@ -10,6 +10,7 @@ from my_rag.components.llms.huggingface_llm import HuggingFaceLLM  # Add this li
 import chromadb
 import re
 import os
+import math
 
 DEFAULT_DATA_PATH = "data_test"  # Path to your PDFs
 logging.basicConfig(level=logging.INFO)
@@ -103,12 +104,21 @@ class Question:
         else:
             truncated_input_ids = input_ids[0]
 
-        # Generate the answer
+        # Check if the tokenizer has a pad token ID; if not, set it to eos_token_id
+        if self.llm.tokenizer.pad_token_id is None:
+            self.llm.tokenizer.pad_token_id = self.llm.tokenizer.eos_token_id
+
+        # Generate the attention mask based on pad token ID
+        attention_mask = (truncated_input_ids != self.llm.tokenizer.pad_token_id).unsqueeze(0)
+
+        # Generate the answer with the updated attention mask and pad token ID
         output = self.llm.model.generate(
             input_ids=truncated_input_ids.unsqueeze(0),
+            attention_mask=attention_mask,
             max_new_tokens=512,  # Specify the number of tokens to generate
             temperature=0.7,
-            top_p=0.9
+            top_p=0.9,
+            pad_token_id=self.llm.tokenizer.pad_token_id  # Now this is explicitly set
         )
 
         # Decode the generated tokens
@@ -165,9 +175,9 @@ class ChromaDBHandler:
             raise RuntimeError("ChromaDB collection is empty. Embeddings were not added successfully.")
 
 
-def process_questions(questions, embedding_model, chromadb_handler, llm, k=5):
+def process_questions_in_batches(questions, embedding_model, chromadb_handler, llm, k=5, batch_size=8):
     """
-    Process a list of questions using the RAG pipeline.
+    Process questions in batches to optimize memory usage and speed.
 
     Parameters:
         questions (list of str): List of questions to process.
@@ -175,24 +185,40 @@ def process_questions(questions, embedding_model, chromadb_handler, llm, k=5):
         chromadb_handler (ChromaDBHandler): Handler for querying the vector DB.
         llm (object): The language model for generating answers.
         k (int): Number of relevant documents to retrieve per question.
+        batch_size (int): Number of questions to process in each batch.
 
     Returns:
-        list of dict: List of results with questions, retrieved documents, and answers.
+        list of dict: Results with questions, retrieved documents, and answers.
     """
     results = []
-    for question_text in questions:
-        question = Question(text=question_text, embedding_model=embedding_model, chromadb_handler=chromadb_handler,
-                            llm=llm, k=k)
+    num_batches = math.ceil(len(questions) / batch_size)
 
-        question.embed_question()
-        retrieved_docs = question.retrieve_documents()
-        answer = question.generate_answer()
+    for i in range(num_batches):
+        batch_questions = questions[i * batch_size:(i + 1) * batch_size]
+        logger.info(f"Processing batch {i + 1}/{num_batches} with {len(batch_questions)} questions.")
 
-        results.append({
-            "question": question_text,
-            "retrieved_documents": retrieved_docs,
-            "answer": answer
-        })
+        batch_embeddings = embedding_model.embed(batch_questions)  # Get embeddings in batch
+        batch_results = []
+
+        for embedding, question_text in zip(batch_embeddings, batch_questions):
+            question = Question(text=question_text, embedding_model=embedding_model,
+                                chromadb_handler=chromadb_handler, llm=llm, k=k)
+            question.embedding = embedding.cpu().numpy()  # Use precomputed embedding
+            retrieved_docs = question.retrieve_documents()
+            answer = question.generate_answer()
+
+            batch_results.append({
+                "question": question_text,
+                "retrieved_documents": retrieved_docs,
+                "answer": answer
+            })
+
+        results.extend(batch_results)
+
+        # Clear memory between batches if necessary
+        torch.cuda.empty_cache()
+        gc.collect()
+
     return results
 
 
@@ -383,13 +409,13 @@ def run_evaluation(models, datasets, k):
 
 
 if __name__ == "__main__":
-    # Step 1: Load your dataset
+    # Load your dataset
     df = load_dataset()  # Ensure your PDFs are in the 'data_test' directory
 
     # Initialize your embedding model
     embedding_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-    # Step 2: Create document embeddings
+    # Create document embeddings
     chunked_texts, document_ids, context_embeddings = create_document_embeddings(
         embedding_model=embedding_model,
         dataframe=df
@@ -402,7 +428,7 @@ if __name__ == "__main__":
     # Initialize ChromaDB handler
     chromadb_handler = ChromaDBHandler(collection_name="my_collection")
 
-    # Step 3: Add embeddings to ChromaDB
+    # Add embeddings to ChromaDB
     chromadb_handler.add_embeddings(
         embeddings=context_embeddings,
         documents=chunked_texts,
@@ -422,22 +448,25 @@ if __name__ == "__main__":
 
     # Define your questions
     questions = [
-        "Is RANKL secreted from the cells?",
-        "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?",
-        "How do Yamanaka factors regulate developmental signaling in ES cells, and what unique role does c-Myc play?",
         "Is Hirschsprung disease a mendelian or a multifactorial disorder?",
-        "Which are the Yamanaka factors?",
         "List signaling molecules (ligands) that interact with the receptor EGFR?",
         "Are long non coding RNAs spliced?",
-        "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?"
+        "Is RANKL secreted from the cells?",
+        "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?",
+        "Which are the Yamanaka factors?",
+        "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?"
     ]
 
-    # Step 4: Generate answers for the list of questions
-    results = process_questions(questions, embedding_model, chromadb_handler, llm, k=5)
-    for result in results:
-        print(f"Question: {result['question']}")
-        # print(f"Retrieved Documents: {result['retrieved_documents']}")
-        print(f"Answer: {result['answer']}\n")
+    # Generate answers for the list of questions
+    results = process_questions_in_batches(questions, embedding_model, chromadb_handler, llm, k=7)
+    for i, result in enumerate(results, start=1):
+        print(f"{i}. Question: {result['question']}")
+        print(f"{i}. Answer: {result['answer']}\n")
+
+    # for result in results:
+    #     print(f"Question: {result['question']}")
+    #     # print(f"Retrieved Documents: {result['retrieved_documents']}")
+    #     print(f"Answer: {result['answer']}\n")
 
 
 
