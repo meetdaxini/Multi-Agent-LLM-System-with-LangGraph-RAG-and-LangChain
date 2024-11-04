@@ -21,6 +21,9 @@ DEFAULT_DATA_PATH = "data_test"  # Path to your PDFs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ================================================================================
+#                   THIS IS NOW CALLED core_RAPTORE.py in GitHub
+# ================================================================================
 
 class TreeNode:
     def __init__(self, level, cluster_id, texts, parent=None):
@@ -634,7 +637,7 @@ if __name__ == "__main__":
         embedding_model=embedding_model,
         llm=llm,
         chromadb_handler=chromadb_handler,
-        depth=2  # adjust this depth to control how many layers of summaries are generated
+        depth=3  # adjust this depth to control how many layers of summaries are generated
     )
 
     # Add hierarchy to the database
@@ -650,11 +653,11 @@ if __name__ == "__main__":
     questions = [
         "Is Hirschsprung disease a Mendelian or a multifactorial disorder?",
         "List signaling molecules (ligands) that interact with the receptor EGFR?",
-        # "Are long non-coding RNAs spliced?",
-        # "Is RANKL secreted from the cells?",
-        # "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?",
-        # "Which are the Yamanaka factors?",
-        # "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?"
+        "Are long non-coding RNAs spliced?",
+        "Is RANKL secreted from the cells?",
+        "Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?",
+        "Which are the Yamanaka factors?",
+        "Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer?"
     ]
 
     # Generate answers for the list of questions
@@ -663,11 +666,17 @@ if __name__ == "__main__":
         embedding_model,
         chromadb_handler,
         llm,
-        k=5,
-        batch_size=2
+        k=3,
+        batch_size=7
     )
 
     # Print the results
     for i, result in enumerate(results, start=1):
         print(f"{i}. Question: {result['question']}")
         print(f"Answer: {result['answer']}\n")
+
+    # Save results to an Excel file
+    results_df = pd.DataFrame(results)
+    output_filename = "RAPTORPipeline_Results.xlsx"
+    results_df.to_excel(output_filename, index=False)
+    logger.info(f"Results saved to {output_filename}")
