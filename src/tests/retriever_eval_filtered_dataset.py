@@ -10,6 +10,9 @@ from my_rag_ollama.get_embedding_function import (
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
 import chromadb
 import re
+import os
+from langchain_community.document_loaders import PyPDFLoader
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -98,17 +101,57 @@ def log_cuda_memory_usage(message=""):
         logger.info(f"{message} - CUDA not available")
 
 
-def load_dataset(dataset_path):
+def load_pdf(pdf_path: str) -> str:
     """
-    Loads the dataset from the given path.
+    Loads a PDF and returns its text content.
 
     Args:
-        dataset_path (str): Path to the dataset file.
+        pdf_path (str): Path to the PDF file
 
     Returns:
-        pd.DataFrame: Loaded dataset.
+        str: Text content of the PDF
     """
-    df = pd.read_parquet(dataset_path)
+    loader = PyPDFLoader(pdf_path)
+    pages = loader.load()
+    return "\n".join(page.page_content for page in pages)
+
+
+def load_dataset(csv_path: str) -> pd.DataFrame:
+    """
+    Loads the dataset from CSV and associated PDFs.
+
+    Args:
+        csv_path (str): Path to the CSV file
+        pdf_dir (str): Directory to store/read PDFs
+
+    Returns:
+        pd.DataFrame: Loaded dataset with context from PDFs
+    """
+    # Create PDF directory if it doesn't exist
+    os.makedirs(
+        "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/filtered_dataset_csv_pdfs/",
+        exist_ok=True,
+    )
+
+    # Load CSV
+    df = pd.read_csv(csv_path)
+    df = df.drop_duplicates(subset="Question ID", keep="first", ignore_index=True)
+    contexts = []
+
+    for idx, row in df.iterrows():
+        pdf_filename = row["PDF Reference"]
+        pdf_path = os.path.join(
+            "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/filtered_dataset_csv_pdfs/",
+            pdf_filename,
+        )
+        try:
+            context = load_pdf(pdf_path)
+            contexts.append(context)
+        except Exception as e:
+            logger.error(f"Failed to load PDF for row {idx}: {e}")
+            contexts.append("")
+
+    df["context"] = contexts
     return df
 
 
@@ -411,6 +454,10 @@ if __name__ == "__main__":
             "batch_size": 100,
         },
         {
+            "name": "sentence-transformers/msmarco-distilbert-base-tas-b",
+            "batch_size": 100,
+        },
+        {
             "name": "mixedbread-ai/mxbai-embed-large-v1",
             "batch_size": 100,
         },
@@ -423,10 +470,10 @@ if __name__ == "__main__":
 
     datasets = [
         {
-            "path": "hf://datasets/m-ric/huggingface_doc_qa_eval/data/train-00000-of-00001.parquet",
+            "path": "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/src/data_mining/filtered_dataset.csv",
             "context_field": "context",
-            "question_field": "question",
-            "doc_id_field": "source_doc",
+            "question_field": "Question",
+            "doc_id_field": "PDF Reference",
         },
     ]
 
@@ -435,4 +482,4 @@ if __name__ == "__main__":
     results_df = pd.DataFrame(results)
     accuracy_columns = [f"Accuracy@k={k}" for k in range(1, max_k + 1)]
     results_df = results_df[["model", "dataset", "settings"] + accuracy_columns]
-    results_df.to_excel("retriever_eval.xlsx", index=False)
+    results_df.to_excel("retriever_eval_filtered_dataset_single_pdf.xlsx", index=False)
