@@ -6,7 +6,6 @@ import gc
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from my_rag_ollama.get_embedding_function import (
     get_msmarco_embeddings,
-    get_mxbai_embed_large_embeddings,
 )
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
 import chromadb
@@ -434,22 +433,22 @@ def run_evaluation(models, datasets, max_k):
 
 if __name__ == "__main__":
     models = [
-        # {
-        #     "name": "nvidia/NV-Embed-v2",
-        #     "batch_size": 5,
-        #     "trust_remote_code": True,
-        #     "load_in_8bit": True,
-        #     "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-        #     "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        #     "max_length": 32768,
-        # },
-        # {
-        #     "name": "dunzhang/stella_en_1.5B_v5",
-        #     "batch_size": 25,
-        #     "trust_remote_code": True,
-        #     "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-        #     "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        # },
+        {
+            "name": "nvidia/NV-Embed-v2",
+            "batch_size": 5,
+            "trust_remote_code": True,
+            "load_in_8bit": True,
+            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
+            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
+            "max_length": 32768,
+        },
+        {
+            "name": "dunzhang/stella_en_1.5B_v5",
+            "batch_size": 25,
+            "trust_remote_code": True,
+            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
+            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
+        },
         {
             "name": "sentence-transformers/all-MiniLM-L6-v2",
             "batch_size": 100,
@@ -466,12 +465,6 @@ if __name__ == "__main__":
             "name": "MSMARCO",
             "get_model_func": get_msmarco_embeddings,
             "embed_document_method": "embed_documents",
-        },
-        {
-            "name": "mxbai embed large",
-            "get_model_func": get_mxbai_embed_large_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": "Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
         },
     ]
 

@@ -38,6 +38,7 @@ class HuggingFaceEmbedding:
             "dunzhang/stella_en_1.5B_v5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             "dunzhang/stella_en_400M_v5",
+            "mixedbread-ai/mxbai-embed-large-v1",
             # TODO: Add more supported models here
         ]
 

@@ -6,7 +6,6 @@ import gc
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from my_rag_ollama.get_embedding_function import (
     get_msmarco_embeddings,
-    get_mxbai_embed_large_embeddings,
 )
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
 import chromadb
@@ -122,8 +121,8 @@ def create_document_embeddings(
     embed_document_method="embed_documents",
     instruction="",
     max_length=None,
-    chunk_size=1000,
-    chunk_overlap=115,
+    chunk_size=2000,
+    chunk_overlap=250,
 ):
     """
     Creates embeddings for the documents, with improved chunking.
@@ -412,15 +411,13 @@ if __name__ == "__main__":
             "batch_size": 100,
         },
         {
+            "name": "mixedbread-ai/mxbai-embed-large-v1",
+            "batch_size": 100,
+        },
+        {
             "name": "MSMARCO",
             "get_model_func": get_msmarco_embeddings,
             "embed_document_method": "embed_documents",
-        },
-        {
-            "name": "mxbai embed large",
-            "get_model_func": get_mxbai_embed_large_embeddings,
-            "embed_document_method": "embed_documents",
-            "instruction": "Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
         },
     ]
 
