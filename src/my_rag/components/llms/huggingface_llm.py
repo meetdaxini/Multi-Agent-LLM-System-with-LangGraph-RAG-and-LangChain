@@ -1,5 +1,6 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from .base import BaseLLM
 import gc
 from typing import Optional, Dict, Any
@@ -20,22 +21,6 @@ class HuggingFaceLLM(BaseLLM):
         trust_remote_code: bool = False,
         **kwargs
     ):
-        """
-        Initializes the Hugging Face LLM.
-
-        Args:
-            model_name (str): The name or path of the pre-trained model.
-            device (Optional[str]): Device to run the model on ('cpu', 'cuda', etc.).
-            torch_dtype (Optional[torch.dtype]): Data type for model weights (e.g., torch.float32).
-            load_in_8bit (bool): Whether to load the model in 8-bit precision.
-            device_map (Optional[str]): Device map for model parallelism ('auto', None, or custom mapping).
-            max_memory (Optional[Dict[str, str]]): Maximum memory allocation per device.
-            trust_remote_code (bool): Whether to trust custom code from the model repository.
-            **kwargs: Additional keyword arguments for model/tokenizer initialization.
-
-        Raises:
-            ValueError: If the model fails to load.
-        """
         self.model_name = model_name
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.torch_dtype = torch_dtype
@@ -45,14 +30,12 @@ class HuggingFaceLLM(BaseLLM):
         self.trust_remote_code = trust_remote_code
 
         try:
-            # Initialize the tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
                 trust_remote_code=self.trust_remote_code,
                 **kwargs
             )
 
-            # Initialize the model
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 torch_dtype=self.torch_dtype,
@@ -63,7 +46,6 @@ class HuggingFaceLLM(BaseLLM):
                 **kwargs
             )
 
-            # Move the model to the specified device
             if self.device_map is None:
                 self.model.to(self.device)
 
@@ -82,25 +64,7 @@ class HuggingFaceLLM(BaseLLM):
         top_p: float = 0.95,
         **kwargs
     ) -> str:
-        """
-        Generates text based on the input prompt.
-
-        Args:
-            prompt (str): The input prompt for the language model.
-            max_length (int): Maximum length of the generated text.
-            num_return_sequences (int): Number of sequences to return.
-            no_repeat_ngram_size (Optional[int]): Size of ngrams to avoid repeating.
-            early_stopping (bool): Whether to stop early when the end-of-sequence token is generated.
-            temperature (float): Sampling temperature.
-            top_k (int): The number of highest probability vocabulary tokens to keep for top-k-filtering.
-            top_p (float): Cumulative probability for nucleus sampling.
-            **kwargs: Additional keyword arguments for the generation method.
-
-        Returns:
-            str: The generated text.
-        """
-        self.model.eval()  # Set model to evaluation mode
-
+        self.model.eval()
         input_ids = self.tokenizer.encode(prompt, return_tensors='pt').to(self.device)
 
         with torch.no_grad():
@@ -119,86 +83,121 @@ class HuggingFaceLLM(BaseLLM):
         output = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
         return output
 
+    def generate_summary(self, text: str, max_length: int = 150, max_new_tokens: int = 150, **kwargs) -> str:
+        """
+        Generates a summary of the input text, splitting it if necessary.
 
-    def generate_response(self,
-        prompt: str,
-        max_length: int = 256,
-        num_return_sequences: int = 1,
-        no_repeat_ngram_size: Optional[int] = None,
-        early_stopping: bool = True,
-        temperature: float = 0.7,
-        top_k: int = 50,
-        top_p: float = 0.95,
-        **kwargs
-        ):
-        messages = [
-            {"role": "system", "content": "You are an AI assistant that provides helpful answers."},
-            {"role": "user", "content": f"Question:\n{prompt}"},
-        ]    
-        input_ids = self.tokenizer.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            return_tensors="pt"
-        ).to(self.model.device)    
-        outputs = self.model.generate(
-                input_ids=input_ids,
-                max_length=max_length,
-                num_return_sequences=num_return_sequences,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                early_stopping=early_stopping,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-            pad_token_id=self.tokenizer.eos_token_id,
+        Args:
+            text (str): The text to summarize.
+            max_length (int): Maximum length of the summary.
+            max_new_tokens (int): Maximum number of new tokens to generate.
+            **kwargs: Additional keyword arguments for the generation method.
+
+        Returns:
+            str: The generated summary.
+        """
+        self.model.eval()
+
+        # Split text if input length exceeds a set threshold (e.g., 1024 tokens)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=512, chunk_overlap=50)
+        text_chunks = text_splitter.split_text(text) if len(text) > 1024 else [text]
+
+        summaries = []
+        for chunk in text_chunks:
+            input_ids = self.tokenizer.encode("Summarize: " + chunk, return_tensors='pt').to(self.device)
+            with torch.no_grad():
+                output_ids = self.model.generate(
+                    input_ids=input_ids,
+                    max_new_tokens=max_new_tokens,
+                    no_repeat_ngram_size=3,
+                    early_stopping=True,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    **kwargs
+                )
+            summaries.append(self.tokenizer.decode(output_ids[0], skip_special_tokens=True))
+
+        # Combine chunk summaries into a final summary
+        final_summary = " ".join(summaries)
+        return final_summary
+
+    # def generate_response(self,
+    #     prompt: str,
+    #     max_length: int = 256,
+    #     num_return_sequences: int = 1,
+    #     no_repeat_ngram_size: Optional[int] = None,
+    #     early_stopping: bool = True,
+    #     temperature: float = 0.7,
+    #     top_k: int = 50,
+    #     top_p: float = 0.8,
+    #     **kwargs
+    # ):
+    #     messages = [
+    #         {"role": "system", "content": "You are an AI assistant that provides helpful answers."},
+    #         {"role": "user", "content": f"Question:\n{prompt}"},
+    #     ]
+    #     input_ids = self.tokenizer.apply_chat_template(
+    #         messages,
+    #         add_generation_prompt=True,
+    #         return_tensors="pt"
+    #     ).to(self.model.device)
+    #     outputs = self.model.generate(
+    #         input_ids=input_ids,
+    #         max_length=max_length,
+    #         num_return_sequences=num_return_sequences,
+    #         no_repeat_ngram_size=no_repeat_ngram_size,
+    #         early_stopping=early_stopping,
+    #         temperature=temperature,
+    #         top_k=top_k,
+    #         top_p=top_p,
+    #         pad_token_id=self.tokenizer.eos_token_id,
+    #         **kwargs
+    #     )
+    #     response_ids = outputs[0][input_ids.shape[-1]:]
+    #     answer = self.tokenizer.decode(response_ids, skip_special_tokens=True).strip()
+    #     return answer
+
+    def generate_response_with_context(
+            self,
+            context: str,
+            prompt: str,
+            max_new_tokens: int = 100,  # Limits the number of tokens for the generated answer
+            num_return_sequences: int = 1,
+            no_repeat_ngram_size: Optional[int] = None,
+            early_stopping: bool = True,
+            temperature: float = 0.7,
+            top_k: int = 50,
+            top_p: float = 0.95,
             **kwargs
-        )    
-        response_ids = outputs[0][input_ids.shape[-1]:]
-        answer = self.tokenizer.decode(response_ids, skip_special_tokens=True).strip()
-        return answer
-
-    def generate_response_with_context(self,
-        context,
-        prompt: str,
-        max_length: int = 256,
-        num_return_sequences: int = 1,
-        no_repeat_ngram_size: Optional[int] = None,
-        early_stopping: bool = True,
-        temperature: float = 0.7,
-        top_k: int = 50,
-        top_p: float = 0.95,
-        **kwargs
-        ):
+    ):
         messages = [
-            {"role": "system", "content": "You are an AI assistant that provides helpful answers using the given context."},
+            {"role": "system",
+             "content": "You are an AI assistant that provides helpful answers using the given context."},
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion:\n{prompt}"},
-        ]  
+        ]
         input_ids = self.tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,
             return_tensors="pt"
-        ).to(self.model.device)    
+        ).to(self.model.device)
+
         outputs = self.model.generate(
-                input_ids=input_ids,
-                max_length=max_length,
-                num_return_sequences=num_return_sequences,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                early_stopping=early_stopping,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
+            input_ids=input_ids,
+            max_new_tokens=max_new_tokens,  # Controls the response length, not the full input length
+            # attention_mask=attention_mask,
+            num_return_sequences=num_return_sequences,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            early_stopping=early_stopping,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
             pad_token_id=self.tokenizer.eos_token_id,
             **kwargs
-        )    
+        )
         response_ids = outputs[0][input_ids.shape[-1]:]
         answer = self.tokenizer.decode(response_ids, skip_special_tokens=True).strip()
         return answer
-
-
 
     def clean_up(self):
-        """
-        Cleans up resources to free memory.
-        """
         del self.model
         del self.tokenizer
         torch.cuda.empty_cache()
