@@ -174,3 +174,19 @@ These statistics show that while RAG and MAR files cover most questions, RAPTOR 
 | Which currently known mitochondrial diseases have been attributed to POLG mutations?               | ❌       | ❌                   | ❌             | ❌  | ✅  | ❌      |
 
 
+| ID | Question                                                                                           |  Frequency |
+|----|----------------------------------------------------------------------------------------------------|-------------------|
+| 1  | Is Hirschsprung disease a Mendelian or a multifactorial disorder?                                  | 1                 |
+| 2  | List signaling molecules (ligands) that interact with the receptor EGFR?                           | 4                 |
+| 4  | Are long non-coding RNAs spliced?                                                                  | 4                 |
+| 5  | Is RANKL secreted from the cells?                                                                  | 3                 |
+| 7  | Which miRNAs could be used as potential biomarkers for epithelial ovarian cancer?                  | 6                 |
+| 8  | Which acetylcholinesterase inhibitors are used for treatment of myasthenia gravis?                 | 1                 |
+| 9  | Has Denosumab (Prolia) been approved by FDA?                                                       | 1                 |
+| 13 | Which are the different isoforms of the mammalian Notch receptor?                                  | 1                 |
+| 15 | Orteronel was developed for treatment of which cancer?                                             | 3                 |
+| 16 | Is the monoclonal antibody Trastuzumab (Herceptin) of potential use in the treatment of prostate cancer? | 7      |
+| 17 | Which are the Yamanaka factors?                                                                    | 7                 |
+| 19 | Where is the protein Pannexin1 located?                                                            | 4                 |
+| 20 | Which currently known mitochondrial diseases have been attributed to POLG mutations?               | 1                 |
+
