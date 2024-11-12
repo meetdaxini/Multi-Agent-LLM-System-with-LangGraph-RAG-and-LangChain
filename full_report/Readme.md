@@ -116,6 +116,10 @@
     * [ ] Start the report with metrics, evaluation results, and create a diagram to visualize the evaluation process and proposed application.
 
 ---
+![Basic MAR Diagram](MAR_Rag.png)
+![Basic RAPTOR Diagram](RAPTOR_Rag.png)
+![Basic ColBERT Diagram](ColBERTT_Rag.png)
+---
 
 ## Summary of Questions Across JSON Files (MAR, RAG, RAPTOR)
 
