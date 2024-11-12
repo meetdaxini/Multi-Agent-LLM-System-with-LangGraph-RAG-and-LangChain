@@ -118,7 +118,7 @@
 ---
 ![Basic MAR Diagram](MAR_Rag.png)
 ![Basic RAPTOR Diagram](RAPTOR_Rag.png)
-![Basic ColBERT Diagram](ColBERTT_Rag.png)
+![Basic ColBERT Diagram](ColBERT_Rag.png)
 ---
 
 ## Summary of Questions Across JSON Files (MAR, RAG, RAPTOR)
