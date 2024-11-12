@@ -115,3 +115,52 @@
     * [ ] Draft a proposal for using RAG in real-time legal document summarization.
     * [ ] Start the report with metrics, evaluation results, and create a diagram to visualize the evaluation process and proposed application.
 
+---
+
+## Summary of Questions Across JSON Files (MAR, RAG, RAPTOR)
+
+### 1. Total Questions
+- **Total Questions**: 13
+  - **Answered**: 8 questions were answered in at least one JSON file.
+  - **Very Close to Ideal**: 5 questions have answers that are very close to the ideal answer.
+  - **Correct Answer**: 5 questions were correctly answered exactly as intended.
+
+### 2. Individual JSON Breakdown
+- **MAR**:
+  - **Answered**: 9 out of 13 questions
+  - **Very Close to Ideal**: 3
+  - **Correct Answer**: 4
+- **RAG**:
+  - **Answered**: 9 out of 13 questions
+  - **Very Close to Ideal**: 4
+  - **Correct Answer**: 4
+- **RAPTOR**:
+  - **Answered**: 6 out of 13 questions
+  - **Very Close to Ideal**: 1
+  - **Correct Answer**: 2
+
+### 3. Overlap and Coverage
+- The **RAG** file had the highest alignment with ideal answers overall, both in the number of questions answered and those very close to the ideal.
+- **MAR** closely followed RAG in terms of answers provided, though fewer were "very close" to the ideal.
+- **RAPTOR** had the fewest answered questions and the least alignment with ideal answers, though it still provided correct answers for some questions.
+
+These statistics show that while RAG and MAR files cover most questions, RAPTOR has a more limited range of answers.
+
+
+| Question                                                                                           | Answered | Very Close to Ideal | Correct Answer | MAR | RAG | RAPTOR |
+|----------------------------------------------------------------------------------------------------|----------|----------------------|----------------|-----|-----|--------|
+| Is Hirschsprung disease classified as a single-gene disorder or influenced by multiple factors?    | ✅       | ✅                   | ❌             | ✅  | ✅  | ❌      |
+| Identify signaling molecules that interact with the EGFR receptor.                                 | ✅       | ✅                   | ✅             | ✅  | ✅  | ✅      |
+| Do long non-coding RNAs get spliced?                                                               | ✅       | ❌                   | ✅             | ❌  | ✅  | ✅      |
+| Do cells release RANKL?                                                                            | ✅       | ❌                   | ✅             | ✅  | ❌  | ❌      |
+| What miRNAs show potential as biomarkers for epithelial ovarian cancer?                            | ✅       | ❌                   | ❌             | ✅  | ✅  | ✅      |
+| What are the Yamanaka factors?                                                                     | ✅       | ✅                   | ✅             | ✅  | ✅  | ❌      |
+| Could the monoclonal antibody Trastuzumab (Herceptin) be beneficial in prostate cancer treatment?  | ✅       | ✅                   | ✅             | ❌  | ✅  | ✅      |
+| Which acetylcholinesterase inhibitors are used for treatment of myasthenia gravis?                 | ✅       | ❌                   | ❌             | ✅  | ✅  | ❌      |
+| Has Denosumab (Prolia) been approved by FDA?                                                       | ❌       | ❌                   | ❌             | ✅  | ❌  | ❌      |
+| Which are the different isoforms of the mammalian Notch receptor?                                  | ❌       | ❌                   | ❌             | ✅  | ✅  | ❌      |
+| Orteronel was developed for treatment of which cancer?                                             | ❌       | ❌                   | ❌             | ❌  | ❌  | ❌      |
+| Where is the protein Pannexin1 located?                                                            | ❌       | ❌                   | ❌             | ❌  | ❌  | ❌      |
+| Which currently known mitochondrial diseases have been attributed to POLG mutations?               | ❌       | ❌                   | ❌             | ❌  | ✅  | ❌      |
+
+
