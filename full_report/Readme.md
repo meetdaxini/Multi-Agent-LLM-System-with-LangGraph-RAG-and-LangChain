@@ -113,13 +113,15 @@
     * [ ] Define and finalize the evaluation metrics for embedding, retrieval, and generation stages.
     * [ ] Run embedding, retrieval, and generation tests, then evaluate the results using the defined metrics.
     * [ ] Draft a proposal for using RAG in real-time legal document summarization.
-    * [ ] Start the report with metrics, evaluation results, and create a diagram to visualize the evaluation process and proposed application.
+    * [ ] Start the report with metrics, and evaluation results, and create a diagram to visualize the evaluation process and proposed application.
 
 ---
 
 ![Basic MAR Diagram](MAR_Rag.png)
 
+
 ![Basic RAPTOR Diagram](RAPTOR_Rag.png)
+
 
 ![Basic ColBERT Diagram](ColBERT_Rag.png)
 
