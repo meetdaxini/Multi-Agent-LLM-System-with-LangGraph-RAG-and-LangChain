@@ -1,90 +1,18 @@
 import pandas as pd
-import numpy as np
 import torch
 import logging
 import gc
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from my_rag_ollama.get_embedding_function import (
-    get_msmarco_embeddings,
+
+from my_rag.components.text_chunker import TextChunker
+from my_rag.components.utils import alphanumeric_string
+from my_rag.components.vectorstores.chroma_store import (
+    ChromaVectorStore,
+    CollectionMode,
 )
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
-import chromadb
-import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def alphanumeric_string(input_string):
-    return re.sub(r"[^a-zA-Z0-9]", "", input_string)
-
-
-class ChromaDBHandler:
-    """
-    A handler class for ChromaDB operations.
-    """
-
-    def __init__(self, collection_name, host="localhost", port=8000):
-        """
-        Initializes the ChromaDB client and creates a collection.
-
-        Args:
-            collection_name (str): Name of the collection.
-            host (str): Host of the ChromaDB server.
-            port (int): Port of the ChromaDB server.
-        """
-        self.collection_name = collection_name
-        self.client = chromadb.HttpClient(host=host, port=port)
-        # Delete existing collection with the same name
-        try:
-            self.client.delete_collection(name=collection_name)
-        except Exception:
-            pass
-        self.collection = self.client.create_collection(
-            name=collection_name, metadata={"hnsw:space": "cosine"}
-        )
-
-    def add_embeddings(self, embeddings, documents, metadatas, ids):
-        """
-        Adds embeddings to the collection.
-
-        Args:
-            embeddings (List[List[float]]): Embeddings to add.
-            documents (List[str]): List of documents.
-            metadatas (List[Dict]): List of metadatas.
-            ids (List[str]): List of document IDs.
-        """
-        self.collection.add(
-            embeddings=embeddings,
-            documents=documents,
-            metadatas=metadatas,
-            ids=ids,
-        )
-
-    def query(self, query_embeddings, n_results, include=["metadatas"]):
-        """
-        Queries the collection.
-
-        Args:
-            query_embeddings (List[List[float]]): Query embeddings.
-            n_results (int): Number of results to return.
-            include (List[str]): What to include in the results.
-
-        Returns:
-            Dict: Query results.
-        """
-        results = self.collection.query(
-            query_embeddings=query_embeddings,
-            n_results=n_results,
-            include=include,
-        )
-        return results
-
-    def delete_collection(self):
-        """
-        Deletes the collection.
-        """
-        self.client.delete_collection(name=self.collection_name)
 
 
 def log_cuda_memory_usage(message=""):
@@ -143,20 +71,9 @@ def create_document_embeddings(
     """
     contexts = dataframe[context_field].tolist()
     document_ids = dataframe[doc_id_field].tolist()
-
-    chunked_texts = []
-    chunked_doc_ids = []
-
-    for context, doc_id in zip(contexts, document_ids):
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-        chunks = text_splitter.split_text(context)
-
-        chunked_texts.extend(chunks)
-        chunked_doc_ids.extend([doc_id] * len(chunks))
-
+    chunked_texts, metadatas = TextChunker(
+        chunk_size=chunk_size, chunk_overlap=chunk_overlap
+    ).create_chunks_batch(contexts, document_ids)
     log_cuda_memory_usage("Before creating context embeddings")
 
     # Use the appropriate method to embed documents
@@ -180,7 +97,7 @@ def create_document_embeddings(
     gc.collect()
     log_cuda_memory_usage("After processing context embeddings")
 
-    return chunked_texts, chunked_doc_ids, embeddings
+    return chunked_texts, metadatas, embeddings
 
 
 def calculate_accuracy_at_ks(
@@ -242,9 +159,9 @@ def calculate_accuracy_at_ks(
     log_cuda_memory_usage("After computing question embeddings")
 
     # Query ChromaDB with the query embeddings
-    results = chromadb_handler.query(
+    results = chromadb_handler.search(
         query_embeddings=embeddings,
-        n_results=max_k,
+        k=max_k,
     )
 
     # Evaluate accuracies for each K
@@ -319,26 +236,22 @@ def run_evaluation(models, datasets, max_k):
                 logger.error(f"Failed to load model {model_name}: {e}")
                 continue
 
-            chunked_texts, document_ids, context_embeddings = (
-                create_document_embeddings(
-                    embedding_model,
-                    df,
-                    context_field,
-                    doc_id_field,
-                    batch_size=batch_size,
-                    embed_document_method=embed_document_method,
-                    instruction=instruction,
-                )
+            chunked_texts, metadatas, context_embeddings = create_document_embeddings(
+                embedding_model,
+                df,
+                context_field,
+                doc_id_field,
+                batch_size=batch_size,
+                embed_document_method=embed_document_method,
+                instruction=instruction,
             )
-
-            # Create unique IDs for each chunk
-            ids = [f"{doc_id}_{idx}" for idx, doc_id in enumerate(document_ids)]
-            # Create metadatas
-            metadatas = [{"doc_id": doc_id} for doc_id in document_ids]
-
-            # Initialize ChromaDBHandler
-            chromadb_handler = ChromaDBHandler(
-                collection_name=alphanumeric_string(model_name)
+            ids = [
+                f"{metadata['doc_id']}_{metadata['chunk_index']}"
+                for metadata in metadatas
+            ]
+            chromadb_handler = ChromaVectorStore(
+                collection_name=alphanumeric_string(model_name),
+                mode=CollectionMode.DROP_IF_EXISTS,
             )
 
             # Add embeddings to ChromaDB
@@ -390,35 +303,30 @@ def run_evaluation(models, datasets, max_k):
 
 if __name__ == "__main__":
     models = [
-        {
-            "name": "nvidia/NV-Embed-v2",
-            "batch_size": 5,
-            "trust_remote_code": True,
-            "load_in_8bit": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-            "max_length": 32768,
-        },
-        {
-            "name": "dunzhang/stella_en_1.5B_v5",
-            "batch_size": 25,
-            "trust_remote_code": True,
-            "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
-            "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
-        },
+        # {
+        #     "name": "nvidia/NV-Embed-v2",
+        #     "batch_size": 5,
+        #     "trust_remote_code": True,
+        #     "load_in_8bit": True,
+        #     "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
+        #     "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
+        #     "max_length": 32768,
+        # },
+        # {
+        #     "name": "dunzhang/stella_en_1.5B_v5",
+        #     "batch_size": 25,
+        #     "trust_remote_code": True,
+        #     "instruction": "Instruct: Represent this passage for retrieval in response to relevant technical questions.\nQuery:",
+        #     "query_instruction": "Instruct: Given a technical query, find the most relevant passages that can provide the answer.\nPassage:",
+        # },
         {
             "name": "sentence-transformers/all-MiniLM-L6-v2",
             "batch_size": 100,
         },
-        {
-            "name": "mixedbread-ai/mxbai-embed-large-v1",
-            "batch_size": 100,
-        },
-        {
-            "name": "MSMARCO",
-            "get_model_func": get_msmarco_embeddings,
-            "embed_document_method": "embed_documents",
-        },
+        # {
+        #     "name": "mixedbread-ai/mxbai-embed-large-v1",
+        #     "batch_size": 100,
+        # },
     ]
 
     datasets = [
