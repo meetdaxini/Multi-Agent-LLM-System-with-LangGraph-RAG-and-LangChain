@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional, Union, Literal
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 
 @dataclass
@@ -11,7 +11,7 @@ class ChunkMetadata:
     chunk_index: int
     total_chunks: int
     source_type: str
-    additional_metadata: Optional[Dict[str, Any]] = None
+    # additional_metadata: Optional[Dict[str, Any]] = {}
 
 
 class TextChunker:
@@ -49,7 +49,7 @@ class TextChunker:
         text: str,
         doc_id: str,
         source_type: str = "text",
-        additional_metadata: Optional[Dict[str, Any]] = None,
+        # additional_metadata: Optional[Dict[str, Any]] = None,
     ) -> tuple[List[str], List[ChunkMetadata]]:
         """
         Split text into chunks with metadata.
@@ -67,12 +67,14 @@ class TextChunker:
         total_chunks = len(chunks)
 
         metadata = [
-            ChunkMetadata(
-                doc_id=doc_id,
-                chunk_index=i,
-                total_chunks=total_chunks,
-                source_type=source_type,
-                additional_metadata=additional_metadata,
+            asdict(
+                ChunkMetadata(
+                    doc_id=doc_id,
+                    chunk_index=i,
+                    total_chunks=total_chunks,
+                    source_type=source_type,
+                    # additional_metadata=additional_metadata,
+                )
             )
             for i in range(total_chunks)
         ]
@@ -84,7 +86,7 @@ class TextChunker:
         texts: List[str],
         doc_ids: List[str],
         source_type: str = "text",
-        additional_metadata: Optional[List[Dict[str, Any]]] = None,
+        # additional_metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> tuple[List[str], List[ChunkMetadata]]:
         """
         Process multiple texts into chunks with metadata.
@@ -93,7 +95,7 @@ class TextChunker:
             texts (List[str]): List of texts to split
             doc_ids (List[str]): List of document identifiers
             source_type (str): Type of source documents
-            additional_metadata (Optional[List[Dict[str, Any]]]): Additional metadata for each text
+            # additional_metadata (Optional[List[Dict[str, Any]]]): Additional metadata for each text
 
         Returns:
             tuple[List[str], List[ChunkMetadata]]: All chunks and their metadata
@@ -102,9 +104,11 @@ class TextChunker:
         all_metadata = []
 
         for i, (text, doc_id) in enumerate(zip(texts, doc_ids)):
-            metadata = additional_metadata[i] if additional_metadata else None
+            # metadata = additional_metadata[i] if additional_metadata else None
             chunks, chunk_metadata = self.create_chunks(
-                text, doc_id, source_type, metadata
+                text,
+                doc_id,
+                source_type,  # metadata
             )
             all_chunks.extend(chunks)
             all_metadata.extend(chunk_metadata)
