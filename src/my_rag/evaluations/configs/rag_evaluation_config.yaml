@@ -1,0 +1,51 @@
+datasets:
+  - name: "HuggingFace QA Dataset"
+    type: "parquet"
+    path: "hf://datasets/m-ric/huggingface_doc_qa_eval/data/train-00000-of-00001.parquet"
+    context_field: "context"
+    question_field: "question"
+    doc_id_field: "source_doc"
+    answer_field: "answer"
+  # - name: "PubMed filtered Dataset"
+  #   type: "csv_pdf"
+  #   path: "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/src/data_mining/filtered_dataset.csv"
+  #   context_field: "context"
+  #   question_field: "Question"
+  #   doc_id_field: "PDF Reference"
+  #   answer_field: "Answer"
+  #   pdf_dir: "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/filtered_dataset_csv_pdfs"
+
+embedding_models:
+  - name: "sentence-transformers/all-MiniLM-L6-v2"
+    batch_size: 100
+
+llm_models:
+  - name: "meta-llama/Meta-Llama-3-8B-Instruct"
+    model_kwargs:
+      trust_remote_code: true
+      load_in_8bit: true
+      device: "cuda"
+      device_map: "auto"
+    max_tokens: 512
+    temperature: 0.7
+
+generator_config:
+  system_message: |
+    You are an AI assistant that provides accurate and helpful answers
+    based on the given context. Your responses should be:
+    1. Focused on the provided context
+    2. Clear and concise
+    3. Accurate and relevant to the question
+    4. Based only on the information given
+  generation_config:
+    max_new_tokens: 512
+    temperature: 0.7
+    top_k: 50
+    top_p: 0.95
+    early_stopping: true
+    no_repeat_ngram_size: 3
+
+max_k: 5
+chunk_size: 2000
+chunk_overlap: 250
+output_dir: "results/rag_evaluations"
