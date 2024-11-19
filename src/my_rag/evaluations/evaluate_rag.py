@@ -115,9 +115,7 @@ class RAGEvaluator:
         ):
             result = {
                 "question": query,
-                "ideal_answer": dataset.get("answers", [""] * len(dataset["queries"]))[
-                    i
-                ],
+                "ideal_answer": dataset.get("ideal_answers")[i],
                 "llm_generated_answer": answer,
                 "document_id": dataset["actual_doc_ids"][i],
                 "retrieved_document_ids": [
@@ -148,7 +146,7 @@ class RAGEvaluator:
                     # Save results
                     output_path = (
                         Path(self.config.output_dir)
-                        / f'rag_evaluations_{embedding_config["name"]}_{llm_config["name"]}.xlsx'
+                        / f'rag_evaluations_{embedding_config["name"].replace("/", "_")}_{llm_config["name"].replace("/", "_")}.xlsx'
                     )
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     results_df.to_excel(output_path, index=False)
