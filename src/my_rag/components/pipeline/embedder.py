@@ -1,5 +1,5 @@
 from typing import Optional
-from .base import PipelineStep, PipelineContext
+from .base import PipelineStep, PipelineData
 from ..embeddings.base import BaseEmbedding
 
 
@@ -16,14 +16,16 @@ class DocumentEmbedder(PipelineStep):
         self.batch_size = batch_size
         self.instruction = instruction
 
-    def run(self, context: PipelineContext) -> PipelineContext:
-        if not context.documents:
+    def run(self, pipeline_data: PipelineData) -> PipelineData:
+        if not pipeline_data.documents:
             raise ValueError("Documents must be provided for embedding")
 
-        context.embeddings = self.model.embed(
-            context.documents, batch_size=self.batch_size, instruction=self.instruction
+        pipeline_data.embeddings = self.model.embed(
+            pipeline_data.documents,
+            batch_size=self.batch_size,
+            instruction=self.instruction,
         )
-        return context
+        return pipeline_data
 
 
 class QueryEmbedder(PipelineStep):
@@ -39,11 +41,13 @@ class QueryEmbedder(PipelineStep):
         self.batch_size = batch_size
         self.instruction = instruction
 
-    def run(self, context: PipelineContext) -> PipelineContext:
-        if not context.queries:
+    def run(self, pipeline_data: PipelineData) -> PipelineData:
+        if not pipeline_data.queries:
             raise ValueError("Queries must be provided for embedding")
 
-        context.query_embeddings = self.model.embed(
-            context.queries, batch_size=self.batch_size, instruction=self.instruction
+        pipeline_data.query_embeddings = self.model.embed(
+            pipeline_data.queries,
+            batch_size=self.batch_size,
+            instruction=self.instruction,
         )
-        return context
+        return pipeline_data

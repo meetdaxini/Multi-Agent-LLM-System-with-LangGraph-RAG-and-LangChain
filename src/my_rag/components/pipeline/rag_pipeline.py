@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from .base import PipelineStep, PipelineContext
+from .base import PipelineStep, PipelineData
 
 
 class RAGPipeline:
@@ -14,19 +14,19 @@ class RAGPipeline:
         document_ids: List[str],
         queries: List[str],
         initial_context: Optional[Dict[str, Any]] = None,
-    ) -> PipelineContext:
-        # Initialize context
-        context = PipelineContext(
+    ) -> PipelineData:
+        # Initialize pipeline_data
+        pipeline_data = PipelineData(
             documents=documents, document_ids=document_ids, queries=queries
         )
 
-        # Update with any initial context
+        # Update with any initial pipeline_data
         if initial_context:
             for key, value in initial_context.items():
-                setattr(context, key, value)
+                setattr(pipeline_data, key, value)
 
         # Run pipeline steps
         for step in self.steps:
-            context = step.run(context)
+            pipeline_data = step.run(pipeline_data)
 
-        return context
+        return pipeline_data
