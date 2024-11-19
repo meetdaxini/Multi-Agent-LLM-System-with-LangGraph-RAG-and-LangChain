@@ -33,6 +33,7 @@ class ParquetDatasetLoader:
             "document_ids": df[config["doc_id_field"]].tolist(),
             "queries": df[config["question_field"]].tolist(),
             "actual_doc_ids": df[config["doc_id_field"]].tolist(),
+            "ideal_answers": df[config["answer_field"]].tolist(),
         }
 
 
@@ -58,6 +59,7 @@ class CSVPDFDatasetLoader:
             "document_ids": df[config["doc_id_field"]].tolist(),
             "queries": df[config["question_field"]].tolist(),
             "actual_doc_ids": df[config["doc_id_field"]].tolist(),
+            "ideal_answers": df[config["answer_field"]].tolist(),
         }
 
 

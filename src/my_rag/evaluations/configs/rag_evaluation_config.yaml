@@ -6,17 +6,19 @@ datasets:
     question_field: "question"
     doc_id_field: "source_doc"
     answer_field: "answer"
-  # - name: "PubMed filtered Dataset"
-  #   type: "csv_pdf"
-  #   path: "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/src/data_mining/filtered_dataset.csv"
-  #   context_field: "context"
-  #   question_field: "Question"
-  #   doc_id_field: "PDF Reference"
-  #   answer_field: "Answer"
-  #   pdf_dir: "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/filtered_dataset_csv_pdfs"
+  - name: "PubMed filtered Dataset"
+    type: "csv_pdf"
+    path: "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/src/data_mining/filtered_dataset.csv"
+    context_field: "context"
+    question_field: "Question"
+    doc_id_field: "PDF Reference"
+    answer_field: "Ideal Answer"
+    pdf_dir: "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/filtered_dataset_csv_pdfs"
 
 embedding_models:
-  - name: "sentence-transformers/all-MiniLM-L6-v2"
+  # - name: "sentence-transformers/all-MiniLM-L6-v2"
+  #   batch_size: 100
+  - name: "mixedbread-ai/mxbai-embed-large-v1"
     batch_size: 100
 
 llm_models:
