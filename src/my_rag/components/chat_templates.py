@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import List, Dict, Any, Optional
 
 
@@ -6,7 +6,6 @@ from typing import List, Dict, Any, Optional
 class Message:
     role: str
     content: str
-    name: Optional[str] = None
 
 
 class ChatTemplateManager:
@@ -17,9 +16,9 @@ class ChatTemplateManager:
         """Returns template configuration for specific models"""
         templates = {
             "default": {
-                "system_template": "System: {system_message}\n",
-                "user_template": "User: {message}\n",
-                "assistant_template": "Assistant: {message}\n",
+                "system_template": "{system_message}",
+                "user_template": "{message}",
+                "assistant_template": "{message}",
                 "system_message_required": False,
                 "response_prefix": "Assistant:",
             },
@@ -31,31 +30,30 @@ class ChatTemplateManager:
         messages: List[Message], model_name: str, add_generation_prompt: bool = True
     ) -> str:
         """Formats messages according to the model's template"""
-        template_config = ChatTemplateManager.get_template_config(model_name)
-        formatted_chat = ""
+        # template_config = ChatTemplateManager.get_template_config(model_name)
+        # formatted_chat = ""
 
-        system_messages = [msg for msg in messages if msg.role == "system"]
-        if system_messages and template_config["system_message_required"]:
-            formatted_chat += template_config["system_template"].format(
-                system_message=system_messages[0].content
-            )
+        # system_messages = [msg for msg in messages if msg.role == "system"]
+        # if system_messages and template_config["system_message_required"]:
+        #     formatted_chat += template_config["system_template"].format(
+        #         system_message=system_messages[0].content
+        #     )
 
-        for msg in messages:
-            if msg.role == "system":
-                continue
-            elif msg.role == "user":
-                formatted_chat += template_config["user_template"].format(
-                    message=msg.content
-                )
-            elif msg.role == "assistant":
-                formatted_chat += template_config["assistant_template"].format(
-                    message=msg.content
-                )
+        # for msg in messages:
+        #     if msg.role == "system":
+        #         continue
+        #     elif msg.role == "user":
+        #         formatted_chat += template_config["user_template"].format(
+        #             message=msg.content
+        #         )
+        #     elif msg.role == "assistant":
+        #         formatted_chat += template_config["assistant_template"].format(
+        #             message=msg.content
+        #         )
 
-        if add_generation_prompt:
-            formatted_chat += template_config["response_prefix"]
-
-        return formatted_chat
+        # if add_generation_prompt:
+        #     formatted_chat += template_config["response_prefix"]
+        return [asdict(message) for message in messages]
 
     @staticmethod
     def create_prompt_from_template(

@@ -215,9 +215,12 @@ class HuggingFaceLLM(BaseLLM):
             messages=messages, model_name=self.model_name
         )
 
-        input_ids = self.tokenizer.encode(formatted_prompt, return_tensors="pt").to(
-            self.device
-        )
+        # input_ids = self.tokenizer.encode(formatted_prompt, return_tensors="pt").to(
+        #     self.device
+        # )
+        input_ids = self.tokenizer.apply_chat_template(
+            formatted_prompt, add_generation_prompt=True, return_tensors="pt"
+        ).to(self.model.device)
 
         with torch.no_grad():
             outputs = self.model.generate(
@@ -231,7 +234,9 @@ class HuggingFaceLLM(BaseLLM):
             )
 
         response_ids = outputs[0][input_ids.shape[-1] :]
-        return self.tokenizer.decode(response_ids, skip_special_tokens=True).strip()
+        answer = self.tokenizer.decode(response_ids, skip_special_tokens=True).strip()
+        print(answer)
+        return answer
 
     def generate_template_response_with_context(
         self,

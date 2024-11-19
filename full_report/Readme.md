@@ -117,19 +117,11 @@
 
 ---
 
-![Basic MAR Diagram](MAR_Rag.png)
+![Basic MAR Diagram](MAR_rag.png)
 
+![Basic RAPTOR Diagram](RAPTOR_rag.png)
 
-
-
-
-![Basic RAPTOR Diagram](RAPTOR_Rag.png)
-
-
-
-
-
-![Basic ColBERT Diagram](ColBERT_Rag.png)
+![Basic ColBERT Diagram](ColBERT_rag.png)
 
 ---
 
