@@ -1,5 +1,5 @@
 from typing import Optional
-from .base import PipelineStep, PipelineContext
+from .base import PipelineStep, PipelineData
 from ..vectorstores.base import BaseVectorStore
 
 
@@ -16,29 +16,30 @@ class Retriever(PipelineStep):
         self.k = k
         self.filter_fn = filter_fn
 
-    def run(self, context: PipelineContext) -> PipelineContext:
+    def run(self, pipeline_data: PipelineData) -> PipelineData:
         # Initialize vector store with document embeddings if not already done
         self.vector_store.add_embeddings(
-            embeddings=context.embeddings,
-            documents=context.documents,
-            metadatas=context.metadata,
+            embeddings=pipeline_data.embeddings,
+            documents=pipeline_data.documents,
+            metadatas=pipeline_data.metadata,
         )
 
         # Get results for each query
         results = self.vector_store.search(
-            query_embeddings=context.query_embeddings,
+            query_embeddings=pipeline_data.query_embeddings,
             k=self.k,
             filter_dict=self.filter_fn() if self.filter_fn else None,
         )
-        context.retrieved_documents = [
+        pipeline_data.retrieved_documents = [
             [doc_id for doc_id in results["metadatas"][idx]]
-            for idx, _ in enumerate(context.query_embeddings)
+            for idx, _ in enumerate(pipeline_data.query_embeddings)
         ]
-        context.retrieved_metadata = [
-            results["metadatas"][idx] for idx, _ in enumerate(context.query_embeddings)
+        pipeline_data.retrieved_metadata = [
+            results["metadatas"][idx]
+            for idx, _ in enumerate(pipeline_data.query_embeddings)
         ]
 
-        # for idx_in_batch, actual_doc_id in enumerate(context.query_embeddings):
+        # for idx_in_batch, actual_doc_id in enumerate(pipeline_data.query_embeddings):
         #     retrieved_metadatas = results["metadatas"][idx_in_batch]
         #     retrieved_doc_ids = [metadata["doc_id"] for metadata in retrieved_metadatas]
 
@@ -48,4 +49,4 @@ class Retriever(PipelineStep):
         #     for k in range(self.k):
         #         if actual_doc_id in unique_retrieved_doc_ids[:k]:
         #             correct_counts[k] += 1
-        return context
+        return pipeline_data

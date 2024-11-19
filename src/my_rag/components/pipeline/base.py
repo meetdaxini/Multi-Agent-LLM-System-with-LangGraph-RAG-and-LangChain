@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class PipelineContext:
+class PipelineData:
     """Holds state and data passed between pipeline steps"""
 
     documents: Optional[List[str]] = None
@@ -22,6 +22,6 @@ class PipelineStep(ABC):
     """Base class for pipeline steps"""
 
     @abstractmethod
-    def run(self, context: PipelineContext) -> PipelineContext:
+    def run(self, pipeline_data: PipelineData) -> PipelineData:
         """Execute the pipeline step"""
         pass

@@ -133,13 +133,13 @@ class RetrieverEvaluator:
         pipeline = self._create_pipeline(model_config)
 
         # Run pipeline
-        context = pipeline.run(
+        pipeline_data = pipeline.run(
             documents=documents, document_ids=document_ids, queries=queries
         )
 
         # Extract retrieved document IDs
         retrieved_doc_ids = []
-        for batch in context.retrieved_metadata:
+        for batch in pipeline_data.retrieved_metadata:
             batch_ids = []
             for metadata in batch:
                 batch_ids.append(metadata["doc_id"])

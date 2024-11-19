@@ -1,5 +1,5 @@
 from typing import Any, Dict, Optional, Callable
-from .base import PipelineStep, PipelineContext
+from .base import PipelineStep, PipelineData
 from ..text_chunker import TextChunker
 
 
@@ -17,14 +17,14 @@ class DocumentProcessor(PipelineStep):
         self.metadata_fn = metadata_fn or (lambda doc, id: {"doc_id": id})
         self.chunker = TextChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
-    def run(self, context: PipelineContext) -> PipelineContext:
-        if not context.documents or not context.document_ids:
+    def run(self, pipeline_data: PipelineData) -> PipelineData:
+        if not pipeline_data.documents or not pipeline_data.document_ids:
             raise ValueError("Documents and document IDs must be provided")
 
         processed_chunks = []
         processed_metadata = []
 
-        for doc, doc_id in zip(context.documents, context.document_ids):
+        for doc, doc_id in zip(pipeline_data.documents, pipeline_data.document_ids):
             # Process document
             processed_doc = self.doc_processor_fn(doc)
 
@@ -39,6 +39,6 @@ class DocumentProcessor(PipelineStep):
                 processed_chunks.append(chunk)
                 processed_metadata.append(base_metadata)
 
-        context.documents = processed_chunks
-        context.metadata = processed_metadata
-        return context
+        pipeline_data.documents = processed_chunks
+        pipeline_data.metadata = processed_metadata
+        return pipeline_data
