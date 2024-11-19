@@ -29,7 +29,7 @@ class BaseVectorStore(ABC):
     @abstractmethod
     def search(
         self,
-        query_embedding: Any,
+        query_embeddings: Any,
         k: int = 5,
         filter_dict: Optional[Dict] = None,
         include: Optional[List[str]] = None,
@@ -38,7 +38,7 @@ class BaseVectorStore(ABC):
         Searches for the top k most similar embeddings.
 
         Args:
-            query_embedding (Any): The embedding of the query.
+            query_embeddings (Any): The embedding of the query.
             k (int): The number of top results to return.
             filter_dict (Optional[Dict]): Optional filters for the search.
             include (Optional[List[str]]): What to include in results.
