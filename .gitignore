@@ -173,3 +173,8 @@ src/docs/_*
 my_vector_store
 chroma
 .DS_Store
+filtered_dataset_csv_pdfs
+data_test
+*.sqlite3
+.ragatouille
+chroma_data

@@ -1,0 +1,49 @@
+datasets:
+  - name: "HuggingFace QA Dataset"
+    type: "parquet"
+    path: "hf://datasets/m-ric/huggingface_doc_qa_eval/data/train-00000-of-00001.parquet"
+    context_field: "context"
+    question_field: "question"
+    doc_id_field: "source_doc"
+  - name: "PubMed filtered Dataset"
+    type: "csv_pdf"
+    path: "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/src/data_mining/filtered_dataset.csv"
+    context_field: "context"
+    question_field: "Question"
+    doc_id_field: "PDF Reference"
+    pdf_dir: "/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/filtered_dataset_csv_pdfs"
+
+models:
+  - name: "sentence-transformers/all-MiniLM-L6-v2"
+    batch_size: 100
+  - name: "mixedbread-ai/mxbai-embed-large-v1"
+    batch_size: 100
+  - name: "nvidia/NV-Embed-v2"
+    batch_size: 5
+    instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
+    query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
+    model_kwargs:
+      trust_remote_code: true
+      load_in_8bit: true
+      max_length: 32768
+  - name: "dunzhang/stella_en_1.5B_v5"
+    batch_size: 20
+    instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
+    query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
+    model_kwargs:
+      trust_remote_code: true
+      load_in_8bit: true
+  - name: "dunzhang/stella_en_1.5B_v5"
+    batch_size: 20
+    instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
+    query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
+    model_kwargs:
+      trust_remote_code: true
+      load_in_8bit: false
+
+
+
+max_k: 5
+chunk_size: 2000
+chunk_overlap: 250
+output_path: "results/retriever_evaluation_results.xlsx"
