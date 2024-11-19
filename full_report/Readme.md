@@ -120,7 +120,13 @@
 ![Basic MAR Diagram](MAR_Rag.png)
 
 
+
+
+
 ![Basic RAPTOR Diagram](RAPTOR_Rag.png)
+
+
+
 
 
 ![Basic ColBERT Diagram](ColBERT_Rag.png)
