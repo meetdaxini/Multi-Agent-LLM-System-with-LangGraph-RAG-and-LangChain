@@ -4,7 +4,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from .base import BaseLLM
 from ..chat_templates import ChatTemplateManager, Message
 import gc
-from typing import Optional, Dict, List, Union
+from typing import Optional, Dict, List
 
 
 class HuggingFaceLLM(BaseLLM):
@@ -211,13 +211,7 @@ class HuggingFaceLLM(BaseLLM):
         **kwargs,
     ) -> str:
         """Generate response using chat template"""
-        formatted_prompt = ChatTemplateManager.format_messages(
-            messages=messages, model_name=self.model_name
-        )
-
-        # input_ids = self.tokenizer.encode(formatted_prompt, return_tensors="pt").to(
-        #     self.device
-        # )
+        formatted_prompt = ChatTemplateManager.format_messages(messages=messages)
         input_ids = self.tokenizer.apply_chat_template(
             formatted_prompt, add_generation_prompt=True, return_tensors="pt"
         ).to(self.model.device)
