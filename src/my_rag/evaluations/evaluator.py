@@ -41,7 +41,7 @@ class CSVPDFDatasetLoader:
     def load(self, config: Dict[str, Any]) -> Dict[str, Any]:
         pdf_loader = PDFLoader()
         df = pd.read_csv(config["path"])
-        df = df.drop_duplicates(subset="Question ID", keep="first")
+        # df = df.drop_duplicates(subset="Question ID", keep="first")
 
         # Load PDFs
         documents = []
@@ -57,9 +57,9 @@ class CSVPDFDatasetLoader:
         return {
             "documents": documents,
             "document_ids": df[config["doc_id_field"]].tolist(),
-            "queries": df[config["question_field"]].tolist(),
+            "queries": df[config["question_field"]].unique().tolist(),
             "actual_doc_ids": df[config["doc_id_field"]].tolist(),
-            "ideal_answers": df[config["answer_field"]].tolist(),
+            "ideal_answers": df[config["answer_field"]].unique().tolist(),
         }
 
 
