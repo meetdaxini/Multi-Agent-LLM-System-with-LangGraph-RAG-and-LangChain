@@ -4,6 +4,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from my_rag.components.llms.huggingface_llm import HuggingFaceLLM
 from typing import List, Optional, Dict, Any, Tuple, Union
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import StandardScaler
 from logging.handlers import RotatingFileHandler
 from sentence_transformers import CrossEncoder
@@ -87,68 +88,6 @@ class QueryResult:
     feedback_score: Optional[float] = None
 
 
-# RAPTOR-specific classes
-class RAPTORTree:
-    """Manages the hierarchical tree structure of documents."""
-
-    def __init__(self):
-        self.nodes: Dict[str, RAPTORNode] = {}
-
-    def add_node(self, node: RAPTORNode):
-        self.nodes[node.node_id] = node
-        if node.parent_id:
-            parent = self.nodes.get(node.parent_id)
-            if parent:
-                parent.children_ids.append(node.node_id)
-
-
-class SemanticAnalyzer:
-    """Handles semantic analysis and coherence checking."""
-
-    def __init__(self, embedding_model):
-        self.embedding_model = embedding_model
-        self.coherence_threshold = 0.7
-
-    def compute_semantic_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
-        return cosine_similarity([embedding1], [embedding2])[0][0]
-
-    def verify_semantic_coherence(self, parent_node: RAPTORNode, child_nodes: List[RAPTORNode]) -> bool:
-        child_embeddings = np.stack([node.embedding for node in child_nodes])
-        mean_child_embedding = np.mean(child_embeddings, axis=0)
-        return self.compute_semantic_similarity(parent_node.embedding, mean_child_embedding) >= self.coherence_threshold
-
-
-class PromptTransformer:
-    """Handles prompt transformation and refinement."""
-
-    def __init__(self, llm: HuggingFaceLLM):
-        self.llm = llm
-        self.history: List[QueryResult] = []
-
-    def transform_prompt(self, original_query: str, context: Optional[str] = None) -> str:
-        """Transform the original query using HuggingFaceLLM for more effective prompting."""
-        # Construct the input with optional context
-        input_text = f"Refine query: {original_query}\nContext: {context}" if context else original_query
-
-        # Use HuggingFaceLLM to transform the prompt
-        transformed_query = self.llm.generate_response_with_context(context=input_text, prompt=input_text, max_new_tokens=128)
-        return transformed_query
-
-    def learn_from_feedback(self, query_result: QueryResult):
-        """Learn from query results and feedback."""
-        self.history.append(query_result)
-
-
-class RelevanceScorer:
-    """Scores relevance between queries and retrieved content."""
-
-    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
-        self.model = CrossEncoder(model_name)
-
-    def score_relevance(self, query: str, passages: List[str]) -> List[float]:
-        return self.model.predict([[query, passage] for passage in passages])
-
-
 # VectorStore implementation
 class VectorStore(ABC):
     """Abstract base class for vector stores."""
@@ -170,6 +109,121 @@ class VectorStore(ABC):
     def verify_population(self) -> None:
         pass
 
+
+class RelevanceScorer:
+    """Refined multi-level relevance scoring system."""
+
+    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
+        self.model = CrossEncoder(model_name)
+
+    def score_relevance(self, query: str, passages: List[str]) -> List[float]:
+        """Score relevance of passages at multiple levels, prioritize deeper context if relevant."""
+        scores = self.model.predict([[query, passage] for passage in passages])
+
+        # Apply weighting to prioritize relevant multi-level context
+        depth_weighted_scores = [score * (0.9 ** depth) for depth, score in enumerate(scores)]
+        return depth_weighted_scores
+
+    def rerank_results(self, results: List[Tuple[RAPTORNode, float]]) -> List[RAPTORNode]:
+        """Rerank nodes by relevance, ensuring context-sensitive retrieval."""
+        # Sort results by relevance score (the float value in the tuple)
+        sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
+        # Extract only the RAPTORNode objects from the sorted list
+        return [node for node, _ in sorted_results]
+
+
+class SemanticAnalyzer:
+    """Enhanced semantic analysis and coherence verification using transformer-based models."""
+
+    def __init__(self, embedding_model_sentece: SentenceTransformer, coherence_threshold: float = 0.7):
+        self.embedding_model = embedding_model_sentece
+        self.coherence_threshold = coherence_threshold
+
+    def compute_semantic_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+        return cosine_similarity([embedding1], [embedding2])[0][0]
+
+    def verify_semantic_coherence(self, parent_node: RAPTORNode, child_nodes: List[RAPTORNode]) -> bool:
+        """Use transformer embeddings to verify coherence between parent and child nodes."""
+        parent_embedding = self.embedding_model.encode(parent_node.content)
+        child_embeddings = np.stack([self.embedding_model.encode(node.content) for node in child_nodes])
+        mean_child_embedding = np.mean(child_embeddings, axis=0)
+
+        return self.compute_semantic_similarity(parent_embedding, mean_child_embedding) >= self.coherence_threshold
+
+    def find_relevant_nodes(self, query: str, nodes: List[RAPTORNode]) -> List[RAPTORNode]:
+        """Find and return nodes relevant to the query based on transformer-based semantic similarity."""
+        query_embedding = self.embedding_model.encode(query)
+        relevant_nodes = [
+            node for node in nodes
+            if self.compute_semantic_similarity(query_embedding, node.embedding) > self.coherence_threshold
+        ]
+        return sorted(relevant_nodes, key=lambda x: x.relevance_score, reverse=True)
+
+
+class RAPTORTree:
+    """Manages the hierarchical tree structure of documents with dynamic routing."""
+
+    def __init__(self):
+        self.nodes: Dict[str, RAPTORNode] = {}
+
+    def add_node(self, node: RAPTORNode):
+        self.nodes[node.node_id] = node
+        if node.parent_id:
+            parent = self.nodes.get(node.parent_id)
+            if parent:
+                parent.children_ids.append(node.node_id)
+
+    def get_top_nodes(self) -> List[RAPTORNode]:
+        """Retrieve top-level nodes for the starting point in the tree."""
+        return [node for node in self.nodes.values() if node.level == 1]
+
+    def get_children(self, node: RAPTORNode) -> List[RAPTORNode]:
+        """Retrieve child nodes of a given node."""
+        return [self.nodes[child_id] for child_id in node.children_ids if child_id in self.nodes]
+
+    def hierarchical_query(self, question: str, analyzer: SemanticAnalyzer, scorer: RelevanceScorer) -> str:
+        """Query the RAPTOR tree hierarchically, dynamically routing through relevant nodes."""
+        current_nodes = self.get_top_nodes()
+        relevant_contexts = []
+
+        while current_nodes:
+            relevant_nodes = analyzer.find_relevant_nodes(question, current_nodes)
+            if not relevant_nodes:
+                break
+            current_nodes = [child for node in relevant_nodes for child in self.get_children(node)]
+            relevant_contexts.extend([node.content for node in relevant_nodes])
+
+        # Aggregate context from relevant nodes
+        refined_context = "\n".join(relevant_contexts[:2])  # Limit for context length
+
+        return refined_context
+
+
+class PromptTransformer:
+    """Handles prompt transformation and refinement."""
+
+    def __init__(self, llm: HuggingFaceLLM):
+        self.llm = llm
+        self.history: List[QueryResult] = []
+
+    def transform_prompt(self, original_query: str, context: Optional[str] = None) -> str:
+        """Transform the original query using HuggingFaceLLM for more effective prompting."""
+        # Construct the input with optional context
+        input_text = f"Refine query: {original_query}\nContext: {context}" if context else original_query
+
+        # Use HuggingFaceLLM to transform the prompt
+        transformed_query = self.llm.generate_response_with_context(context=input_text, prompt=input_text, max_new_tokens=128)
+        return transformed_query
+
+    def generate_abstract(self, content: str) -> str:
+        """Generate an abstract or summary for high-level nodes."""
+        prompt = f"Summarize this content for a high-level overview:\n\n{content}"
+        summary = self.llm.generate_response_with_context(context="", prompt=prompt, max_new_tokens=150)
+        return summary
+
+    def learn_from_feedback(self, query_result: QueryResult):
+        """Learn from query results and feedback."""
+        self.history.append(query_result)
 
 def safe_mean(scores):
     """Compute the mean of a list safely, handling empty lists and NaN values."""
@@ -218,17 +272,26 @@ class ChromaDBStore(VectorStore):
         logger.info(
             f"Added {len(embeddings)} embeddings to the ChromaDB collection '{self.collection_name}'. Total documents: {self.document_count}")
 
-    def query(self, query_embeddings: List[EmbeddingVector], n_results: int, include: Optional[List[str]] = None) -> \
-    Dict[str, Any]:
-        """Query the collection with provided embeddings and retrieve top results."""
+    def query(self, query_embeddings: List[List[float]], n_results: int, include: Optional[List[str]] = None) -> dict:
+        """Query with provided embeddings and retrieve top results."""
         if include is None:
-            include = ["documents", "metadatas"]
-        results = self.collection.query(
-            query_embeddings=query_embeddings,
-            n_results=n_results,
-            include=include,
-        )
-        return results
+            include = ["documents", "metadatas", "distances"]
+
+        try:
+            results = self.collection.query(
+                query_embeddings=query_embeddings,
+                n_results=n_results,
+                include=include,
+            )
+            # Ensure results have default structure if fields are missing
+            return {
+                "documents": results.get("documents", [[]]),
+                "metadatas": results.get("metadatas", [[]]),
+                "distances": results.get("distances", [[]]),
+            }
+        except Exception as e:
+            logger.error(f"Error querying vector store: {str(e)}")
+            return {"documents": [[]], "metadatas": [[]], "distances": [[]]}
 
     def delete_collection(self) -> None:
         """Delete the collection and reset document count."""
@@ -252,6 +315,11 @@ class ChromaDBStore(VectorStore):
         return self.document_count
 
 
+def decompress_embedding(compressed_data: bytes) -> np.ndarray:
+    """Decompress a single embedding vector."""
+    return pickle.loads(zlib.decompress(compressed_data)).astype(np.float32)
+
+
 class StorageOptimizer:
     """Handles embedding compression and storage optimization."""
 
@@ -267,14 +335,10 @@ class StorageOptimizer:
         # Serialize and compress
         return zlib.compress(pickle.dumps(compressed), level=self.compression_level)
 
-    def decompress_embedding(self, compressed_data: bytes) -> np.ndarray:
-        """Decompress a single embedding vector."""
-        return pickle.loads(zlib.decompress(compressed_data)).astype(np.float32)
-
     def quantize_embedding(self, embedding: np.ndarray, bits: int = 8) -> np.ndarray:
         """Quantize embedding to reduce precision with NaN handling."""
-        # Replace NaN values with 0
-        embedding = np.nan_to_num(embedding, 0)
+        # Ensure that NaN values are replaced with 0
+        embedding = np.nan_to_num(embedding, nan=0.0)  # Explicitly set NaNs to 0.0
 
         if bits == 8:
             # Normalize to [-1, 1] range before scaling to [0, 255]
@@ -374,7 +438,7 @@ class OptimizedChromaDBStore(ChromaDBStore):
                     if os.path.exists(embedding_path):
                         with open(embedding_path, 'rb') as f:
                             compressed_data = f.read()
-                        quantized = self.storage_optimizer.decompress_embedding(compressed_data)
+                        quantized = decompress_embedding(compressed_data)
                         embedding = self.storage_optimizer.dequantize_embedding(quantized)
                         self.embedding_cache[doc_id] = embedding
 
@@ -392,13 +456,16 @@ class RAPTORSystem:
             embedding_model: HuggingFaceEmbedding,
             vector_store: ChromaDBStore,
             llm: HuggingFaceLLM,
+            embedding_model_sentece: SentenceTransformer,
             logger: Optional[logging.Logger] = None
     ):
+        self.raptor_tree = RAPTORTree()
         self.prompt_transformer = PromptTransformer(llm)
         self.relevance_scorer = RelevanceScorer()
         self.embedding_model = embedding_model
         self.vector_store = vector_store
         self.llm = llm
+        self.semantic_analyzer = SemanticAnalyzer(embedding_model_sentece)
         self.logger = logger or self._setup_default_logger()
 
     def summarize_content(self, document_content: str) -> str:
@@ -427,26 +494,38 @@ class RAPTORSystem:
         relevant_history = self._get_relevant_history(question)
 
         # Step 2: Transform the original query
-        transformed_query = self.prompt_transformer.transform_prompt(question, context=relevant_history[0].context if relevant_history else None)
+        transformed_query = self.prompt_transformer.transform_prompt(
+            question, context=relevant_history[0].context if relevant_history else None
+        )
 
-        # Step 3: Embed the transformed query
+        # Step 3: Use hierarchical dynamic routing to retrieve relevant context
+        context = self.raptor_tree.hierarchical_query(transformed_query, self.semantic_analyzer, self.relevance_scorer)
+
+        # Step 4: Embed the transformed query
         query_embedding = self.embedding_model.embed([transformed_query])[0]
 
-        # Step 4: Retrieve directly from the vector store
+        # Step 5: Retrieve directly from the vector store for additional context
         results = self.vector_store.query(query_embeddings=[query_embedding.tolist()], n_results=n_results)
-        contexts = results.get("documents", [[]])[0]
+        additional_contexts = results.get("documents", [[]])[0]
+        refined_context = "\n".join(sorted([context] + additional_contexts[:2],
+                                           key=lambda x: -self.relevance_scorer.score_relevance(transformed_query, [x])[
+                                               0]))
 
-        # Step 5: Refine context
-        refined_context = "\n".join(sorted(contexts[:2], key=lambda x: -self.relevance_scorer.score_relevance(transformed_query, [x])[0]))
-
-        # Step 6: Generate response
+        # Step 6: Generate response using the LLM
         prompt = f"Given the context:\n{refined_context}\n\nAnswer the question: {transformed_query}"
         response = self.llm.generate_response_with_context(context=refined_context, prompt=prompt, max_new_tokens=250)
 
         # Step 7: Score confidence
         confidence_score = self.relevance_scorer.score_relevance(transformed_query, [response])[0]
 
-        return QueryResult(query=question, transformed_query=transformed_query, context=refined_context, response=response, confidence=confidence_score)
+        # Return detailed query result with transformed query, context, response, and confidence
+        return QueryResult(
+            query=question,
+            transformed_query=transformed_query,
+            context=refined_context,
+            response=response,
+            confidence=confidence_score
+        )
 
     def _get_relevant_history(self, query: str) -> List[QueryResult]:
         if not self.prompt_transformer.history:
@@ -521,17 +600,13 @@ class RAPTORSystem:
             logger.error(f"Failed to index documents: {str(e)}")
             raise
 
-        except Exception as e:
-            logger.error(f"Failed to index documents: {str(e)}")
-            raise
-
 
 class OptimizedRAPTORSystem(RAPTORSystem):
     """Storage-optimized version of RAPTORSystem."""
 
-    def __init__(self, embedding_model, vector_store, llm,
+    def __init__(self, embedding_model, vector_store, embedding_model_sentece, llm,
                  cache_size: int = 1000, logger: Optional[logging.Logger] = None):
-        super().__init__(embedding_model, vector_store, llm, logger)
+        super().__init__(embedding_model, vector_store, llm, embedding_model_sentece, logger)
         self.cache_size = cache_size
         self._setup_storage_optimization()
 
@@ -575,7 +650,7 @@ class EnhancedRetrievalRAPTOR:
             reranking_top_k: int = 10,
             similarity_threshold: float = 0.85,
             use_hybrid_search: bool = True,
-            documents: List[Union[Dict[str, Any], Document]] = None
+            documents: List[Union[Dict[str, Any], Document]] = None,
     ):
         self.embedding_model = embedding_model
         self.vector_store = vector_store
@@ -585,6 +660,66 @@ class EnhancedRetrievalRAPTOR:
         self.similarity_threshold = similarity_threshold
         self.use_hybrid_search = use_hybrid_search
         self.documents = documents
+        self.raptor_tree = RAPTORTree()  # Initialize the hierarchical structure
+        self.semantic_analyzer = SemanticAnalyzer(embedding_model)
+        self.relevance_scorer = RelevanceScorer()
+
+    def add_document_to_raptor(self, document):
+        """Process and add document to the RAPTOR tree with hierarchical structure."""
+
+        # Ensure embedding_model is available
+        document_processor = DocumentProcessor(chunk_size=1000, embedding_model=self.embedding_model)
+
+        nodes = document_processor.process_document_to_nodes(document)  # Create nodes from document
+        for node in nodes:
+            if node.parent_id and not self.semantic_analyzer.verify_semantic_coherence(
+                    self.raptor_tree.nodes[node.parent_id], [node]):
+                continue  # Skip adding nodes that don't meet coherence criteria
+            self.raptor_tree.add_node(node)
+
+    def get_relevant_nodes(self, question: str, nodes: List[RAPTORNode]) -> List[RAPTORNode]:
+        """Find and return nodes relevant to the query based on semantic similarity."""
+        # Generate the embedding for the question
+        query_embedding = self.semantic_analyzer.embedding_model.encode(question)
+
+        relevant_nodes = []
+
+        for node in nodes:
+            # Compute semantic similarity between query and each node's embedding
+            similarity_score = self.semantic_analyzer.compute_semantic_similarity(query_embedding, node.embedding)
+
+            # If similarity is above a defined threshold, consider it relevant
+            if similarity_score >= self.semantic_analyzer.coherence_threshold:
+                # Update the node's relevance score (this can be used for sorting)
+                node.relevance_score = similarity_score
+                relevant_nodes.append(node)
+
+        # Sort relevant nodes by relevance score in descending order
+        relevant_nodes.sort(key=lambda x: x.relevance_score, reverse=True)
+
+        return relevant_nodes
+
+    def hierarchical_query(self, question: str, n_results: int = 3) -> QueryResult:
+        """Query RAPTOR tree hierarchically, refining context as relevance increases."""
+        current_nodes = self.raptor_tree.get_top_nodes()  # Start at the top level
+        relevant_contexts = []
+
+        while current_nodes:
+            # Filter for relevant nodes based on query similarity
+            relevant_nodes = self.get_relevant_nodes(question, current_nodes)
+            if not relevant_nodes:
+                break
+            current_nodes = [child for node in relevant_nodes for child in self.raptor_tree.get_children(node)]
+            relevant_contexts.extend([node.content for node in relevant_nodes])
+
+        # Combine relevant contexts and generate response
+        refined_context = "\n".join(relevant_contexts[:2])  # Limit for context length
+        prompt = f"Given the context:\n{refined_context}\n\nAnswer the question: {question}"
+        response = self.llm.generate_response_with_context(context=refined_context, prompt=prompt, max_new_tokens=250)
+        confidence_score = self.relevance_scorer.score_relevance(question, [response])[0]
+
+        return QueryResult(query=question, transformed_query=question, context=refined_context, response=response,
+                           confidence=confidence_score)
 
     def _semantic_search(self, query: str, n_results: int = 10) -> List[Dict[str, Any]]:
         """Perform semantic search using dense embeddings."""
@@ -908,15 +1043,76 @@ def remove_duplicate_documents(documents):
             unique_documents[doc.id] = doc
     return list(unique_documents.values())
 
+
+def find_parent_id(index, level, nodes):
+    """Find parent node id for the current chunk based on its level."""
+    if level == 1:
+        return None  # Top level has no parent
+    for node in reversed(nodes):
+        if node.level == level - 1:
+            return node.node_id
+    return None
+
+
+def determine_level(chunk):
+    """Determine the hierarchical level of a document chunk based on structure."""
+    # Placeholder logic - adapt based on document format
+    if "Chapter" in chunk:
+        return 1
+    elif "Section" in chunk:
+        return 2
+    return 3
+
+
+def default_summarize_content(text: str) -> str:
+    """A placeholder summarization function."""
+    return text[:200]  # A simple fallback that truncates content as a 'summary'
+
+
 class DocumentProcessor:
-    """Handles document loading and preprocessing."""
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 115):
+    def __init__(
+            self,
+            chunk_size: int = 1000,
+            chunk_overlap: int = 115,
+            raptor_system: Optional[RAPTORSystem] = None,
+            embedding_model: Optional[HuggingFaceEmbedding] = None
+    ):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap
         )
+
+        # Type hint to indicate HuggingFaceEmbedding is expected
+        self.embedding_model: HuggingFaceEmbedding = embedding_model
+        if self.embedding_model is None:
+            raise ValueError("An embedding model of type HuggingFaceEmbedding must be provided.")
+
+        # Summarize content function based on provided RAPTORSystem or default
+        self.summarize_content = raptor_system.summarize_content if raptor_system else default_summarize_content
+
+    def process_document_to_nodes(self, document):
+        nodes = []
+        chunks = self.text_splitter.split_text(document.content)
+        for i, chunk in enumerate(chunks):
+            level = determine_level(chunk)
+            parent_id = find_parent_id(i, level, nodes)
+
+            # Generate embedding using the `embed` method
+            embedding = self.embedding_model.embed([chunk])[
+                0]  # `embed` returns a batch, so use [0] to get the first embedding
+
+            node = RAPTORNode(
+                content=chunk,
+                summary=self.summarize_content(chunk),
+                embedding=embedding,
+                level=level,
+                node_id=f"{document.id}_{i}",
+                parent_id=parent_id
+            )
+            nodes.append(node)
+        return nodes
 
     def load_and_split_documents(self, directory: Path) -> List[Document]:
         """Load PDFs from directory and split into chunks."""
@@ -1005,8 +1201,262 @@ def create_document_embeddings(
     return chunked_texts, chunked_doc_ids, embeddings
 
 
+class UnifiedRAPTORSystem:
+    """Unified RAPTOR System combining base, enhanced retrieval, and optimized functionality."""
+    def __init__(
+            self,
+            embedding_model: HuggingFaceEmbedding,
+            vector_store: ChromaDBStore,
+            llm: HuggingFaceLLM,
+            embedding_model_sentece: SentenceTransformer,
+            cache_size: int = 1000,
+            cross_encoder_name: str = "cross-encoder/ms-marco-MiniLM-L-12-v2",
+            reranking_top_k: int = 10,
+            similarity_threshold: float = 0.65,
+            use_hybrid_search: bool = True,
+            logger: Optional[logging.Logger] = None,
+    ):
+        # Core components
+        self.embedding_model = embedding_model
+        self.vector_store = vector_store
+        self.llm = llm
+        self.semantic_analyzer = SemanticAnalyzer(embedding_model_sentece)
+        self.relevance_scorer = RelevanceScorer(cross_encoder_name)
+        self.prompt_transformer = PromptTransformer(llm)
+
+        # RAPTOR-specific components
+        self.raptor_tree = RAPTORTree()
+
+        # Optimization parameters
+        self.cache_size = cache_size
+        self.reranking_top_k = reranking_top_k
+        self.similarity_threshold = similarity_threshold
+        self.use_hybrid_search = use_hybrid_search
+
+        # Logger
+        self.logger = logger or self._setup_default_logger()
+
+        # Query cache for optimized retrieval
+        self.query_cache = {}
+        self.cache_clear_threshold = 100
+        self.query_count = 0
+
+    def initialize_bm25(self, documents: List[Dict[str, Any]]):
+        """Initialize the BM25 model with tokenized documents."""
+        self._doc_mapping = documents  # Save the original document mappings
+        tokenized_corpus = [doc['content'].lower().split() for doc in documents]
+        self._bm25 = BM25Okapi(tokenized_corpus)
+
+    @staticmethod
+    def _setup_default_logger() -> logging.Logger:
+        """Create a default logger with file rotation."""
+        logger = logging.getLogger("UnifiedRAPTORSystem")
+        logger.setLevel(logging.INFO)
+        handler = RotatingFileHandler(
+            "raptor_system.log",
+            maxBytes=1024 * 1024,  # 1MB
+            backupCount=5
+        )
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        return logger
+
+    def index_documents(self, documents: List[Document], batch_size: int = 50) -> None:
+        """Index documents into the vector store."""
+        try:
+            documents = remove_duplicate_documents(documents)
+            enable_mixed_precision(self.embedding_model.model)
+
+            for i in range(0, len(documents), batch_size):
+                batch_documents = documents[i:i + batch_size]
+                self.logger.info(f"Processing batch {i // batch_size + 1}")
+
+                chunked_texts, chunked_doc_ids, embeddings = create_document_embeddings(
+                    embedding_model=self.embedding_model,
+                    dataframe=pd.DataFrame({
+                        "context": [doc.content for doc in batch_documents],
+                        "source_doc": [doc.id for doc in batch_documents]
+                    }),
+                    context_field="context",
+                    doc_id_field="source_doc"
+                )
+
+                self.vector_store.add_documents(
+                    documents=chunked_texts,
+                    embeddings=embeddings.tolist(),
+                    metadatas=[{"source": doc_id} for doc_id in chunked_doc_ids],
+                    ids=[f"{doc_id}_{idx}" for idx, doc_id in enumerate(chunked_doc_ids)]
+                )
+                self.logger.info(f"Successfully indexed batch {i // batch_size + 1}")
+                clear_gpu_memory()
+        except Exception as e:
+            self.logger.error(f"Failed to index documents: {str(e)}")
+            raise
+
+    def query(self, question: str, n_results: int = 3) -> QueryResult:
+        """Handle query with hierarchical, hybrid, and optimized retrieval."""
+        # Step 1: Retrieve relevant query history
+        relevant_history = self._get_relevant_history(question)
+
+        # Step 2: Transform the query
+        transformed_query = self.prompt_transformer.transform_prompt(
+            question, context=relevant_history[0].context if relevant_history else None
+        )
+
+        # Step 3: Hierarchical retrieval
+        context = self.raptor_tree.hierarchical_query(
+            question=transformed_query,
+            analyzer=self.semantic_analyzer,
+            scorer=self.relevance_scorer
+        )
+
+        # Step 4: Embed the transformed query
+        query_embedding = self.embedding_model.embed([transformed_query])[0]
+
+        # Step 5: Hybrid or semantic search in the vector store
+        search_results = self._hybrid_search(transformed_query) if self.use_hybrid_search else self._semantic_search(
+            transformed_query)
+        additional_contexts = [res['content'] for res in search_results[:n_results]]
+
+        # Step 6: Aggregate context
+        combined_context = self._aggregate_context([context] + additional_contexts, transformed_query)
+
+        # Step 7: Generate response using the LLM
+        response = self._generate_response(transformed_query, combined_context)
+
+        # Step 8: Calculate confidence score
+        confidence_score = safe_mean([self.relevance_scorer.score_relevance(transformed_query, [res])[0]
+                                      for res in additional_contexts])
+
+        return QueryResult(
+            query=question,
+            transformed_query=transformed_query,
+            context=combined_context,
+            response=response,
+            confidence=confidence_score
+        )
+
+    def _hybrid_search(self, query: str, n_results: int = 10) -> List[Dict[str, Any]]:
+        """Perform hybrid search combining semantic and keyword-based retrieval."""
+        semantic_results = self._semantic_search(query, n_results)
+        keyword_results = self._bm25_search(query, n_results)
+        return self._merge_search_results(semantic_results, keyword_results)
+
+    def _semantic_search(self, query: str, n_results: int = 10) -> List[Dict[str, Any]]:
+        """Perform semantic search using vector store."""
+        query_embedding = self.embedding_model.embed([query])[0]
+        results = self.vector_store.query([query_embedding.tolist()], n_results=n_results)
+
+        # Validate the structure of results
+        if not results or not results.get("documents"):
+            logger.warning("Semantic search returned no results.")
+            return []
+
+        formatted_results = []
+        for doc, meta, dist in zip(
+                results.get("documents", [[]])[0],
+                results.get("metadatas", [[]])[0],
+                results.get("distances", [[]])[0]
+        ):
+            formatted_results.append({
+                'content': doc,
+                'metadata': meta,
+                'score': 1 - dist  # Convert distance to similarity score
+            })
+        return formatted_results
+
+    def _aggregate_context(self, contexts: List[str], query: str) -> str:
+        """Combine multiple contexts into a coherent response."""
+        prompt = f"""Combine the following contexts to answer the question:\n\n{query}\n\nContexts:\n{contexts}"""
+        return self.llm.generate_response_with_context(prompt=prompt, context="", max_new_tokens=500)
+
+    def _generate_response(self, query: str, context: str) -> str:
+        """Generate the final response based on the aggregated context."""
+        prompt = f"""Answer the question based on the context below:\n\nContext: {context}\n\nQuestion: {query}"""
+        return self.llm.generate_response_with_context(prompt=prompt, context=context, max_new_tokens=300)
+
+    def _get_relevant_history(self, query: str) -> List[QueryResult]:
+        """Retrieve relevant past queries for context."""
+        if not self.prompt_transformer.history:
+            return []
+        query_embedding = self.embedding_model.embed([query])[0]
+        history_embeddings = self.embedding_model.embed([h.query for h in self.prompt_transformer.history])
+        similarities = cosine_similarity([query_embedding], history_embeddings)[0]
+        return [self.prompt_transformer.history[i] for i in np.where(similarities > 0.8)[0]]
+
+    def _bm25_search(self, query: str, n_results: int = 10) -> List[Dict[str, Any]]:
+        """Perform BM25 keyword search."""
+        query_tokens = query.lower().split()
+
+        # Ensure BM25 is initialized
+        if not hasattr(self, '_bm25'):
+            raise ValueError("BM25 model not initialized. Call `initialize_bm25` before using BM25 search.")
+
+        doc_scores = self._bm25.get_scores(query_tokens)
+        top_indices = sorted(range(len(doc_scores)), key=lambda i: doc_scores[i], reverse=True)[:n_results]
+
+        results = []
+        for idx in top_indices:
+            results.append({
+                'content': self._doc_mapping[idx]['content'],
+                'metadata': self._doc_mapping[idx].get('metadata', {}),
+                'score': float(doc_scores[idx])
+            })
+        return results
+
+    def _merge_search_results(
+            self,
+            semantic_results: List[Dict[str, Any]],
+            keyword_results: List[Dict[str, Any]],
+            semantic_weight: float = 0.7,
+            keyword_weight: float = 0.3
+    ) -> List[Dict[str, Any]]:
+        """Merge and score results from semantic and keyword-based searches."""
+        # Ensure all results are dictionaries
+        if not all(isinstance(res, dict) for res in semantic_results + keyword_results):
+            raise TypeError(
+                "All search results must be dictionaries with keys like 'content', 'metadata', and 'score'.")
+
+        merged_results = {}
+
+        # Add semantic results with weighted scores
+        for result in semantic_results:
+            content = result['content']
+            score = result.get('score', 0) * semantic_weight
+            if content in merged_results:
+                merged_results[content]['score'] += score
+            else:
+                merged_results[content] = {
+                    'content': content,
+                    'metadata': result.get('metadata', {}),
+                    'score': score
+                }
+
+        # Add keyword results with weighted scores
+        for result in keyword_results:
+            content = result['content']
+            score = result.get('score', 0) * keyword_weight
+            if content in merged_results:
+                merged_results[content]['score'] += score
+            else:
+                merged_results[content] = {
+                    'content': content,
+                    'metadata': result.get('metadata', {}),
+                    'score': score
+                }
+
+        # Convert merged results to a list and sort by score
+        merged_results_list = list(merged_results.values())
+        merged_results_list.sort(key=lambda x: x['score'], reverse=True)
+
+        return merged_results_list
+
+
 def main():
-    # Calculate storage requirements
+    # Configuration
     available_space = 22.09  # GB
     embedding_dim = 1024  # Adjust based on your model
     avg_document_size = 1000  # bytes
@@ -1014,13 +1464,6 @@ def main():
     # Calculate maximum documents based on available space
     max_documents = int((available_space * 0.8 * (1024 ** 3)) /
                         (embedding_dim / 4 + avg_document_size * 0.3 * 1.1))
-
-    # Process and load documents
-    doc_processor = DocumentProcessor(chunk_size=1000)
-    documents = doc_processor.load_and_split_documents(Path(DEFAULT_DATA_PATH))
-
-    # Convert Document objects to dictionaries
-    documents_as_dicts = [{"content": doc.content, "metadata": doc.metadata, "id": doc.id} for doc in documents]
 
     # Initialize components
     embedding_model = HuggingFaceEmbedding(
@@ -1040,26 +1483,30 @@ def main():
         torch_dtype=torch.float16
     )
 
-    # Initialize RAPTOR systems
-    raptor_system = OptimizedRAPTORSystem(
-        embedding_model=embedding_model,
-        vector_store=vector_store,
-        llm=llm,
-        cache_size=1000
-    )
+    semantic_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-    enhanced_raptor = EnhancedRetrievalRAPTOR(
+    # Initialize the Unified RAPTOR System
+    raptor_system = UnifiedRAPTORSystem(
         embedding_model=embedding_model,
         vector_store=vector_store,
         llm=llm,
+        embedding_model_sentece=semantic_model,
+        cache_size=1000,
         cross_encoder_name="cross-encoder/ms-marco-MiniLM-L-12-v2",
         reranking_top_k=10,
-        similarity_threshold=0.85,
-        use_hybrid_search=True,
-        documents=documents_as_dicts
+        similarity_threshold=0.65,
+        use_hybrid_search=True
     )
 
+    # Load and process documents
+    doc_processor = DocumentProcessor(chunk_size=1000, embedding_model=embedding_model)
+    documents = doc_processor.load_and_split_documents(Path(DEFAULT_DATA_PATH))
 
+    # Convert Document objects to dictionaries
+    documents_as_dicts = [{"content": doc.content, "metadata": doc.metadata, "id": doc.id} for doc in documents]
+
+    # Initialize BM25 for keyword search
+    raptor_system.initialize_bm25(documents_as_dicts)
 
     # Adjust document count if storage is limited
     estimated_storage = calculate_storage_requirements(len(documents), embedding_dim, avg_document_size)
@@ -1070,7 +1517,7 @@ def main():
         reduction_factor = available_space / estimated_storage
         documents = documents[:int(len(documents) * reduction_factor)]
 
-    # Index documents
+    # Index documents into the system
     raptor_system.index_documents(documents)
 
     # Define example questions
@@ -1090,32 +1537,24 @@ def main():
         "Which currently known mitochondrial diseases have been attributed to POLG mutations?"
     ]
 
-    # Query and save results
-    answers = {}
-    results = {question: enhanced_raptor.enhanced_query(question, n_results=3) for question in questions}
-
-    for question, result in results.items():
-        answer = result['response']
-        answers[question] = answer
-        print(f"\n❀❀ Question ❀❀: {question}")
-        print(f"❀❀ Answer ❀❀: {answer}")
-
-        # Dictionary to store simplified question-answer pairs
-        answers = {}
-
-    # Iterate through questions and collect responses
+    # Query the Unified RAPTOR System
+    results = {}
     for question in questions:
-        result = enhanced_raptor.enhanced_query(question, n_results=3)
-        answer = result['response']
+        result = raptor_system.query(question, n_results=3)
+        results[question] = {
+            "response": result.response,
+            "context": result.context,
+            "confidence": result.confidence
+        }
+        print(f"\n❀❀ Question ❀❀: {question}")
+        print(f"❀❀ Answer ❀❀: {result.response}")
 
-        # Save the question-answer pair in answers dictionary
-        answers[question] = answer
-
-    # Save question-answer pairs to JSON
-    with open("question_answers_pairs.json", "w") as file:
-        json.dump(answers, file, indent=4)
-    print("Question-answer pairs saved to question_answers_pairs.json")
+    # Save results to JSON
+    with open("unified_raptor_results.json", "w") as file:
+        json.dump(results, file, indent=4)
+    print("Results saved to unified_raptor_results.json")
 
 
 if __name__ == "__main__":
     main()
+
