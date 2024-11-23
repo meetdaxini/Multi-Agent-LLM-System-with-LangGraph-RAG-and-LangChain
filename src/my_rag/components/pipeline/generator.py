@@ -45,11 +45,7 @@ class Generator(PipelineStep):
     def _prepare_context_message(self, context: List[str], query: str) -> str:
         """Prepares the context and query into a formatted message"""
         context_str = "\n".join(context)
-        return (
-            f"Please answer the following question using the provided documents as context.\n\n"
-            f"Context:\n{context_str}\n\n"
-            f"Question: {query}"
-        )
+        return context_str
 
     def run(self, pipeline_data: PipelineData) -> PipelineData:
         """

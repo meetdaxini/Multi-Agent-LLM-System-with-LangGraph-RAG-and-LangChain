@@ -10,6 +10,7 @@ from my_rag.components.utils import alphanumeric_string
 from .metrics import MetricsCalculator
 import os
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
+from my_rag.components.embeddings.aws_embedding import AWSBedrockEmbedding
 from my_rag.components.vectorstores.chroma_store import (
     ChromaVectorStore,
     CollectionMode,
@@ -18,6 +19,7 @@ import pandas as pd
 from my_rag.components.pdf_loader import PDFLoader
 from typing import Dict, Any
 from pathlib import Path
+import configparser
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +94,26 @@ class RetrieverEvaluator:
 
     def _create_pipeline(self, model_config: Dict[str, Any]):
         """Creates pipeline for a specific model configuration"""
-        embedding_model = HuggingFaceEmbedding(
-            model_name=model_config["name"], **model_config.get("model_kwargs", {})
-        )
+        if model_config.get("model_kwargs", {}).get("aws"):
+            config_file = model_config.get("model_kwargs", {}).get("aws_creds_file")
+            config_name = model_config.get("model_kwargs", {}).get("aws_config_name")
+            config = configparser.ConfigParser()
+            config.read(config_file)
+            aws_access_key = config[config_name]["aws_access_key_id"]
+            aws_secret_key = config[config_name]["aws_secret_access_key"]
+            aws_session_token = config[config_name]["aws_session_token"]
+            region = config[config_name]["region"]
+            embedding_model = AWSBedrockEmbedding(
+                model_id=model_config["name"],
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key,
+                aws_session_token=aws_session_token,
+                region_name=region,
+            )
+        else:
+            embedding_model = HuggingFaceEmbedding(
+                model_name=model_config["name"], **model_config.get("model_kwargs", {})
+            )
 
         vector_store = ChromaVectorStore(
             collection_name=alphanumeric_string(f"eval_{model_config['name']}"),
@@ -108,12 +127,12 @@ class RetrieverEvaluator:
                 ),
                 DocumentEmbedder(
                     embedding_model=embedding_model,
-                    batch_size=model_config["batch_size"],
+                    batch_size=model_config.get("batch_size", None),
                     instruction=model_config.get("instruction"),
                 ),
                 QueryEmbedder(
                     embedding_model=embedding_model,
-                    batch_size=model_config["batch_size"],
+                    batch_size=model_config.get("batch_size", None),
                     instruction=model_config.get("query_instruction"),
                 ),
                 Retriever(vector_store=vector_store, k=self.config.max_k),

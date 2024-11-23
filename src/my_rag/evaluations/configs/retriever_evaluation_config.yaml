@@ -35,14 +35,13 @@ models:
     model_kwargs:
       trust_remote_code: true
       load_in_8bit: true
-  - name: "dunzhang/stella_en_1.5B_v5"
-    batch_size: 20
+  - name: "amazon.titan-embed-text-v2:0"
     instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
     query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
     model_kwargs:
-      trust_remote_code: true
-      load_in_8bit: false
-
+      aws: true
+      aws_creds_file: /home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/config/config.ini
+      aws_config_name: BedRock_LLM_API
 
 
 max_k: 5
