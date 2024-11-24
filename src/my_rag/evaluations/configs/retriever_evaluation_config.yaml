@@ -18,8 +18,12 @@ datasets:
 models:
   - name: "sentence-transformers/all-MiniLM-L6-v2"
     batch_size: 100
+    instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
+    query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
   - name: "mixedbread-ai/mxbai-embed-large-v1"
     batch_size: 100
+    instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
+    query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
   - name: "nvidia/NV-Embed-v2"
     batch_size: 5
     instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
@@ -38,6 +42,26 @@ models:
   - name: "amazon.titan-embed-text-v2:0"
     instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
     query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
+    model_kwargs:
+      aws: true
+      aws_creds_file: /home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/config/config.ini
+      aws_config_name: BedRock_LLM_API
+  - name: "sentence-transformers/all-MiniLM-L6-v2"
+    batch_size: 100
+  - name: "mixedbread-ai/mxbai-embed-large-v1"
+    batch_size: 100
+  - name: "nvidia/NV-Embed-v2"
+    batch_size: 5
+    model_kwargs:
+      trust_remote_code: true
+      load_in_8bit: true
+      max_length: 32768
+  - name: "dunzhang/stella_en_1.5B_v5"
+    batch_size: 20
+    model_kwargs:
+      trust_remote_code: true
+      load_in_8bit: true
+  - name: "amazon.titan-embed-text-v2:0"
     model_kwargs:
       aws: true
       aws_creds_file: /home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/config/config.ini

@@ -43,7 +43,7 @@ class CSVPDFDatasetLoader:
     def load(self, config: Dict[str, Any]) -> Dict[str, Any]:
         pdf_loader = PDFLoader()
         df = pd.read_csv(config["path"])
-        # df = df.drop_duplicates(subset="Question ID", keep="first")
+        df = df.drop_duplicates(subset="Question ID", keep="first")
 
         # Load PDFs
         documents = []

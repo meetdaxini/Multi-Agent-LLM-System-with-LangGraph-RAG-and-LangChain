@@ -125,7 +125,7 @@ class HuggingFaceEmbedding:
                 batch_texts = texts[i : i + batch_size]
                 embeddings = self.model.encode(
                     batch_texts,
-                    instruction=instruction,
+                    instruction=instruction or "",
                     max_length=max_length,
                     batch_size=batch_size,
                     **kwargs,
