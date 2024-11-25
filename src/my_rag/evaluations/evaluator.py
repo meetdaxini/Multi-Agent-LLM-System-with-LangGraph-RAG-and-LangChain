@@ -20,8 +20,7 @@ from my_rag.components.pdf_loader import PDFLoader
 from typing import Dict, Any
 from pathlib import Path
 import configparser
-
-logger = logging.getLogger(__name__)
+from .logger import setup_logger
 
 
 # Dataset loaders
@@ -30,12 +29,26 @@ class ParquetDatasetLoader:
         import pandas as pd
 
         df = pd.read_parquet(config["path"])
+
+        grouped_df = (
+            df.groupby(config["question_field"])
+            .agg(
+                {
+                    config["answer_field"]: "first",
+                    config["doc_id_field"]: list,
+                    config["context_field"]: list,
+                }
+            )
+            .reset_index()
+        )
         return {
             "documents": df[config["context_field"]].tolist(),
             "document_ids": df[config["doc_id_field"]].tolist(),
-            "queries": df[config["question_field"]].tolist(),
-            "actual_doc_ids": df[config["doc_id_field"]].tolist(),
-            "ideal_answers": df[config["answer_field"]].tolist(),
+            "queries": grouped_df[config["question_field"]].tolist(),
+            "actual_doc_ids": grouped_df[
+                config["doc_id_field"]
+            ].tolist(),  # Now returns list of lists
+            "ideal_answers": grouped_df[config["answer_field"]].tolist(),
         }
 
 
@@ -43,25 +56,37 @@ class CSVPDFDatasetLoader:
     def load(self, config: Dict[str, Any]) -> Dict[str, Any]:
         pdf_loader = PDFLoader()
         df = pd.read_csv(config["path"])
-        df = df.drop_duplicates(subset="Question ID", keep="first")
-
-        # Load PDFs
+        grouped_df = (
+            df.groupby(config["question_field"])
+            .agg(
+                {
+                    config["answer_field"]: "first",
+                    config["doc_id_field"]: list,
+                }
+            )
+            .reset_index()
+        )
+        unique_pdfs = df[config["doc_id_field"]].unique()
         documents = []
-        for pdf_file in df[config["doc_id_field"]]:
+        document_ids = []
+
+        for pdf_file in unique_pdfs:
             pdf_path = Path(config["pdf_dir"]) / pdf_file
             try:
                 content = pdf_loader.load_single_pdf(str(pdf_path))
                 documents.append(content)
+                document_ids.append(pdf_file)
             except Exception as e:
                 logging.error(f"Error loading PDF {pdf_file}: {e}")
-                documents.append("")
 
         return {
             "documents": documents,
-            "document_ids": df[config["doc_id_field"]].tolist(),
-            "queries": df[config["question_field"]].unique().tolist(),
-            "actual_doc_ids": df[config["doc_id_field"]].tolist(),
-            "ideal_answers": df[config["answer_field"]].unique().tolist(),
+            "document_ids": document_ids,
+            "queries": grouped_df[config["question_field"]].tolist(),
+            "actual_doc_ids": grouped_df[
+                config["doc_id_field"]
+            ].tolist(),  # Now returns list of lists
+            "ideal_answers": grouped_df[config["answer_field"]].tolist(),
         }
 
 
@@ -149,6 +174,7 @@ class RetrieverEvaluator:
         actual_doc_ids: List[str],
     ) -> Dict[str, Any]:
         """Evaluates a single model"""
+        logger = setup_logger(model_config["name"])
         logger.info(f"Evaluating model: {model_config['name']}")
 
         pipeline = self._create_pipeline(model_config)
@@ -171,6 +197,7 @@ class RetrieverEvaluator:
             retrieved_doc_ids=retrieved_doc_ids,
             actual_doc_ids=actual_doc_ids,
             max_k=self.config.max_k,
+            model_name=model_config["name"],
         )
 
         result = {
@@ -213,4 +240,3 @@ class RetrieverEvaluator:
         """Saves evaluation results"""
         os.makedirs(os.path.dirname(self.config.output_path), exist_ok=True)
         df.to_excel(self.config.output_path, index=False)
-        logger.info(f"Results saved to {self.config.output_path}")

@@ -1,7 +1,7 @@
 import yaml
-import logging
 import argparse
 from my_rag.evaluations.evaluator import RetrieverEvaluator, EvaluationConfig
+from my_rag.evaluations.logger import setup_logger
 
 
 def main():
@@ -13,11 +13,9 @@ def main():
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    # Setup main logger
+    logger = setup_logger("main_evaluation")
+    logger.info("Starting evaluation process")
 
     # Create evaluation config
     eval_config = EvaluationConfig(
@@ -33,7 +31,7 @@ def main():
     evaluator = RetrieverEvaluator(eval_config)
     evaluator.evaluate_all()
 
-    logging.info("Evaluation completed successfully")
+    logger.info("Evaluation completed successfully")
 
 
 if __name__ == "__main__":
