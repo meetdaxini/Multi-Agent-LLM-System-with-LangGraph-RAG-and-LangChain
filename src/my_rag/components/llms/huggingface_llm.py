@@ -44,7 +44,7 @@ class HuggingFaceLLM(BaseLLM):
                 **kwargs,
             )
 
-            if self.device_map is None:
+            if self.device_map is None and not self.load_in_8bit:
                 self.model.to(self.device)
 
         except Exception as e:
