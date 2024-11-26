@@ -18,36 +18,36 @@ datasets:
 models:
   - name: "sentence-transformers/all-MiniLM-L6-v2"
     batch_size: 100
-    instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
-    query_instruction: "Instruct: Represent this query to retrieve the most relevant passages capable of answering it. Ensure clarity and specificity of the question.\nQuery:"
+    # instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
+    query_instruction: "Instruct: Given a question, retrieve passages that answer the question.\nQuery:"
   - name: "mixedbread-ai/mxbai-embed-large-v1"
     batch_size: 100
-    instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
-    query_instruction: "Instruct: Represent this query to retrieve the most relevant passages capable of answering it. Ensure clarity and specificity of the question.\nQuery:"
+    # instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
+    query_instruction: "Instruct: Given a question, retrieve passages that answer the question.\nQuery:"
   - name: "nvidia/NV-Embed-v2"
     batch_size: 2
-    instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
-    query_instruction: "Instruct: Represent this query to retrieve the most relevant passages capable of answering it. Ensure clarity and specificity of the question.\nQuery:"
+    # instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
+    query_instruction: "Instruct: Given a question, retrieve passages that answer the question.\nQuery:"
     model_kwargs:
       trust_remote_code: true
       load_in_8bit: true
       max_length: 32768
   - name: "dunzhang/stella_en_1.5B_v5"
     batch_size: 2
-    instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
-    query_instruction: "Instruct: Represent this query to retrieve the most relevant passages capable of answering it. Ensure clarity and specificity of the question.\nQuery:"
+    # instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
+    query_instruction: "Instruct: Given a web search query, retrieve relevant passages that answer the query.\nQuery:"
     model_kwargs:
       trust_remote_code: true
   - name: "dunzhang/stella_en_1.5B_v5"
     batch_size: 2
-    instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
-    query_instruction: "Instruct: Represent this query to retrieve the most relevant passages capable of answering it. Ensure clarity and specificity of the question.\nQuery:"
+    # instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
+    query_instruction: "Instruct: Given a web search query, retrieve relevant passages that answer the query.\nQuery:"
     model_kwargs:
       trust_remote_code: true
       load_in_8bit: true
   - name: "amazon.titan-embed-text-v2:0"
-    instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
-    query_instruction: "Instruct: Represent this query to retrieve the most relevant passages capable of answering it. Ensure clarity and specificity of the question.\nQuery:"
+    # instruction: "Instruct: Represent this passage to effectively represent its content for retrieval in response to relevant questions. Focus on capturing key details and context.\nPassage:"
+    query_instruction: "Instruct: Given a question, retrieve passages that answer the question.\nQuery:"
     model_kwargs:
       aws: true
       aws_creds_file: /home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/config/config.ini
