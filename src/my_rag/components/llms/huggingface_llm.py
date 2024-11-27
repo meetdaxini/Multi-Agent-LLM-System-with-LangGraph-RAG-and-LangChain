@@ -229,7 +229,6 @@ class HuggingFaceLLM(BaseLLM):
 
         response_ids = outputs[0][input_ids.shape[-1] :]
         answer = self.tokenizer.decode(response_ids, skip_special_tokens=True).strip()
-        print(answer)
         return answer
 
     def generate_template_response_with_context(

@@ -57,9 +57,10 @@ class Generator(PipelineStep):
         Returns:
             Updated pipeline data with generated responses
         """
-        if not pipeline_data.queries or not pipeline_data.retrieved_documents:
-            raise ValueError("Queries and retrieved documents must be provided")
-
+        if not pipeline_data.queries:
+            return pipeline_data
+        if not pipeline_data.retrieved_documents:
+            raise "No documents retrieved"
         responses = []
         for query, docs in zip(
             pipeline_data.queries, pipeline_data.retrieved_documents

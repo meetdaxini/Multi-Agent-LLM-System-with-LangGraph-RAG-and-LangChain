@@ -10,9 +10,9 @@ class RAGPipeline:
 
     def run(
         self,
-        documents: List[str],
-        document_ids: List[str],
-        queries: List[str],
+        documents: Optional[List[str]] = None,
+        document_ids: Optional[List[str]] = None,
+        queries: Optional[List[str]] = None,
         initial_context: Optional[Dict[str, Any]] = None,
     ) -> PipelineData:
         # Initialize pipeline_data
