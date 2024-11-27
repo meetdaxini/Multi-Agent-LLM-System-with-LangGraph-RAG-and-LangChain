@@ -11,10 +11,13 @@ from .metrics import MetricsCalculator
 import os
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
 from my_rag.components.embeddings.aws_embedding import AWSBedrockEmbedding
+from my_rag.components.reranking.ragatouille_colbert_reranker import ColBERTReranker
 from my_rag.components.vectorstores.chroma_store import (
     ChromaVectorStore,
     CollectionMode,
 )
+from my_rag.components.pipeline.reranker import RerankerStep
+
 import pandas as pd
 from my_rag.components.pdf_loader import PDFLoader
 from typing import Dict, Any
@@ -102,6 +105,7 @@ class EvaluationConfig:
     dataset_configs: List[Dict[str, Any]]
     model_configs: List[Dict[str, Any]]
     max_k: int = 5
+    rereank_max_k: int = 5
     chunk_size: int = 2000
     chunk_overlap: int = 250
     output_path: str = "retriever_evaluation_results.xlsx"
@@ -196,7 +200,7 @@ class RetrieverEvaluator:
         metrics = self.metrics_calculator.calculate_metrics(
             retrieved_doc_ids=retrieved_doc_ids,
             actual_doc_ids=actual_doc_ids,
-            max_k=self.config.max_k,
+            max_k=self.config.rereank_max_k or self.config.max_k,
             model_name=model_config["name"],
         )
 
@@ -240,3 +244,58 @@ class RetrieverEvaluator:
         """Saves evaluation results"""
         os.makedirs(os.path.dirname(self.config.output_path), exist_ok=True)
         df.to_excel(self.config.output_path, index=False)
+
+
+class RerankingRetrieverEvaluator(RetrieverEvaluator):
+
+    def _create_pipeline(self, model_config: Dict[str, Any]):
+        """Creates pipeline for a specific model configuration"""
+        if model_config.get("model_kwargs", {}).get("aws"):
+            config_file = model_config.get("model_kwargs", {}).get("aws_creds_file")
+            config_name = model_config.get("model_kwargs", {}).get("aws_config_name")
+            config = configparser.ConfigParser()
+            config.read(config_file)
+            aws_access_key = config[config_name]["aws_access_key_id"]
+            aws_secret_key = config[config_name]["aws_secret_access_key"]
+            aws_session_token = config[config_name]["aws_session_token"]
+            region = config[config_name]["region"]
+            embedding_model = AWSBedrockEmbedding(
+                model_id=model_config["name"],
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key,
+                aws_session_token=aws_session_token,
+                region_name=region,
+            )
+        else:
+            embedding_model = HuggingFaceEmbedding(
+                model_name=model_config["name"], **model_config.get("model_kwargs", {})
+            )
+
+        vector_store = ChromaVectorStore(
+            collection_name=alphanumeric_string(f"eval_{model_config['name']}"),
+            mode=CollectionMode.DROP_IF_EXISTS,
+        )
+        reranker = ColBERTReranker()
+        return RAGPipeline(
+            [
+                DocumentProcessor(
+                    chunk_size=self.config.chunk_size,
+                    chunk_overlap=self.config.chunk_overlap,
+                ),
+                DocumentEmbedder(
+                    embedding_model=embedding_model,
+                    batch_size=model_config.get("batch_size", None),
+                    instruction=model_config.get("instruction"),
+                ),
+                QueryEmbedder(
+                    embedding_model=embedding_model,
+                    batch_size=model_config.get("batch_size", None),
+                    instruction=model_config.get("query_instruction"),
+                ),
+                Retriever(vector_store=vector_store, k=self.config.max_k),
+                RerankerStep(
+                    reranker=reranker,
+                    k=min(self.config.max_k, self.config.rereank_max_k),
+                ),
+            ]
+        )
