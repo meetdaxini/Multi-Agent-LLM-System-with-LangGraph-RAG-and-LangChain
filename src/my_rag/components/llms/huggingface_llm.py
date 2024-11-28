@@ -81,15 +81,12 @@ class HuggingFaceLLM(BaseLLM):
         output = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
         return output
 
-    def generate_summary(
-        self, text: str, max_length: int = 150, max_new_tokens: int = 150, **kwargs
-    ) -> str:
+    def generate_summary(self, text: str, max_tokens: int = 150, **kwargs) -> str:
         """
         Generates a summary of the input text, splitting it if necessary.
 
         Args:
             text (str): The text to summarize.
-            max_length (int): Maximum length of the summary.
             max_new_tokens (int): Maximum number of new tokens to generate.
             **kwargs: Additional keyword arguments for the generation method.
 
@@ -110,7 +107,7 @@ class HuggingFaceLLM(BaseLLM):
             with torch.no_grad():
                 output_ids = self.model.generate(
                     input_ids=input_ids,
-                    max_new_tokens=max_new_tokens,
+                    max_new_tokens=max_tokens,
                     no_repeat_ngram_size=3,
                     early_stopping=True,
                     pad_token_id=self.tokenizer.eos_token_id,
@@ -164,7 +161,7 @@ class HuggingFaceLLM(BaseLLM):
         self,
         context: str,
         prompt: str,
-        max_new_tokens: int = 100,  # Limits the number of tokens for the generated answer
+        max_tokens: int = 100,  # Limits the number of tokens for the generated answer
         num_return_sequences: int = 1,
         no_repeat_ngram_size: Optional[int] = None,
         early_stopping: bool = True,
@@ -186,7 +183,7 @@ class HuggingFaceLLM(BaseLLM):
 
         outputs = self.model.generate(
             input_ids=input_ids,
-            max_new_tokens=max_new_tokens,  # Controls the response length, not the full input length
+            max_new_tokens=max_tokens,  # Controls the response length, not the full input length
             # attention_mask=attention_mask,
             num_return_sequences=num_return_sequences,
             no_repeat_ngram_size=no_repeat_ngram_size,
@@ -204,7 +201,7 @@ class HuggingFaceLLM(BaseLLM):
     def generate_with_template(
         self,
         messages: List[Message],
-        max_new_tokens: int = 100,
+        max_tokens: int = 100,
         temperature: float = 0.7,
         top_k: int = 50,
         top_p: float = 0.95,
@@ -219,7 +216,7 @@ class HuggingFaceLLM(BaseLLM):
         with torch.no_grad():
             outputs = self.model.generate(
                 input_ids=input_ids,
-                max_new_tokens=max_new_tokens,
+                max_new_tokens=max_tokens,
                 temperature=temperature,
                 top_k=top_k,
                 top_p=top_p,
@@ -237,7 +234,7 @@ class HuggingFaceLLM(BaseLLM):
         query: str,
         system_message: Optional[str] = None,
         chat_history: Optional[List[Message]] = None,
-        max_new_tokens: int = 100,
+        max_tokens: int = 100,
         temperature: float = 0.7,
         top_k: int = 50,
         top_p: float = 0.95,
@@ -262,7 +259,7 @@ class HuggingFaceLLM(BaseLLM):
 
         return self.generate_with_template(
             messages=messages,
-            max_new_tokens=max_new_tokens,
+            max_tokens=max_tokens,
             temperature=temperature,
             top_k=top_k,
             top_p=top_p,

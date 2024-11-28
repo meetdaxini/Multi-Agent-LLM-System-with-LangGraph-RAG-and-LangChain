@@ -34,7 +34,7 @@ class Generator(PipelineStep):
         )
         self.chat_history = chat_history or []
         self.generation_config = generation_config or {
-            "max_new_tokens": 512,
+            "max_tokens": 512,
             "temperature": 0.7,
             "top_k": 50,
             "top_p": 0.95,
