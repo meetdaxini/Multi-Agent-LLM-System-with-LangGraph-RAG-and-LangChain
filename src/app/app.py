@@ -2,7 +2,7 @@ import streamlit as st
 import tempfile
 from pathlib import Path
 import os
-from typing import List, Optional
+from typing import List
 import torch
 import gc
 from my_rag.components.pdf_loader import PDFLoader
@@ -20,6 +20,8 @@ from my_rag.components.vectorstores.chroma_store import (
     CollectionMode,
 )
 import configparser
+from my_rag.components.pipeline.reranker import RerankerStep
+from my_rag.components.reranking.ragatouille_colbert_reranker import ColBERTReranker
 
 
 class SimpleRAGApp:
@@ -35,6 +37,7 @@ class SimpleRAGApp:
         "Claude 3.5 Sonnet v1": "anthropic.claude-3-5-sonnet-20240620-v1:0",
         "Llama 3 8B Instruct": "meta-llama/Meta-Llama-3-8B-Instruct",
     }
+    RERANKERS = {"ColBERT v2.0": "colbert-ir/colbertv2.0"}
 
     def __init__(self, params):
         self.pdf_loader = PDFLoader()
@@ -42,6 +45,8 @@ class SimpleRAGApp:
         self.setup_models()
         self.setup_vector_store()
         self.setup_pipeline()
+        # if params.get("use_reranking", False):
+        # self.setup_reranker()
 
     def clean_up_resources(self):
         if hasattr(self, "embedding_model"):
@@ -50,6 +55,8 @@ class SimpleRAGApp:
             self.llm.clean_up()
         if hasattr(self, "vector_store"):
             self.vector_store.clean_up()
+        if hasattr(self, "reranker"):  # Add cleanup for reranker if it exists
+            del self.reranker
         torch.cuda.empty_cache()
         gc.collect()
 
@@ -111,44 +118,57 @@ class SimpleRAGApp:
             self.llm = HuggingFaceLLM(model_name=model_name, **model_config)
 
     def setup_vector_store(self):
+        prefix = "rerank" if self.params.get("use_reranking", False) else "simple"
+        collection_name = f"{prefix}_rag_{self.params['embedding_model'].replace('/', '_').replace(' ', '_')}"
+
         self.vector_store = ChromaVectorStore(
-            collection_name=f"rag_{self.params['embedding_model'].replace('/', '_').replace(' ', '_')}",
+            collection_name=collection_name,
             mode=CollectionMode.DROP_IF_EXISTS,
         )
 
-    def setup_pipeline(self):
-        # Set batch size based on embedding model
-        batch_size = 3
-        self.pipeline = RAGPipeline(
-            [
-                DocumentProcessor(
-                    chunk_size=self.params["chunk_size"],
-                    chunk_overlap=self.params["chunk_overlap"],
-                ),
-                DocumentEmbedder(
-                    embedding_model=self.embedding_model, batch_size=batch_size
-                ),
-                QueryEmbedder(
-                    embedding_model=self.embedding_model, batch_size=batch_size
-                ),
-                Retriever(vector_store=self.vector_store, k=self.params["k"]),
-                Generator(
-                    llm=self.llm,
-                    system_message=self.params["system_message"],
-                    generation_config={
-                        "max_tokens": self.params["max_tokens"],
-                        "temperature": self.params["temperature"],
-                        "top_k": self.params["top_k"],
-                        "top_p": self.params["top_p"],
-                        "anthropic_version": (
-                            "bedrock-2023-05-31"
-                            if "claude" in self.params["llm_model"].lower()
-                            else None
-                        ),
-                    },
-                ),
-            ]
+    def setup_reranker(self):
+        self.reranker = ColBERTReranker(model_name="colbert-ir/colbertv2.0")
+        self.reranking_step = RerankerStep(
+            reranker=self.reranker, k=self.params["reranking_k"]
         )
+
+    def setup_pipeline(self):
+        # Base pipeline steps
+        pipeline_steps = [
+            DocumentProcessor(
+                chunk_size=self.params["chunk_size"],
+                chunk_overlap=self.params["chunk_overlap"],
+            ),
+            DocumentEmbedder(embedding_model=self.embedding_model, batch_size=3),
+            QueryEmbedder(embedding_model=self.embedding_model, batch_size=3),
+            Retriever(vector_store=self.vector_store, k=self.params["k"]),
+        ]
+
+        # Add reranking step if enabled
+        if self.params.get("use_reranking", False):
+            self.setup_reranker()
+            pipeline_steps.append(self.reranking_step)
+
+        # Add generator as final step
+        pipeline_steps.append(
+            Generator(
+                llm=self.llm,
+                system_message=self.params["system_message"],
+                generation_config={
+                    "max_tokens": self.params["max_tokens"],
+                    "temperature": self.params["temperature"],
+                    "top_k": self.params["top_k"],
+                    "top_p": self.params["top_p"],
+                    "anthropic_version": (
+                        "bedrock-2023-05-31"
+                        if "claude" in self.params["llm_model"].lower()
+                        else None
+                    ),
+                },
+            )
+        )
+
+        self.pipeline = RAGPipeline(pipeline_steps)
 
     def process_file(self, file) -> str:
         with tempfile.NamedTemporaryFile(
@@ -211,8 +231,19 @@ class SimpleRAGApp:
 
 
 def main():
-    st.set_page_config(page_title="Simple RAG App", layout="wide")
-    st.title("Simple RAG App")
+    st.set_page_config(page_title="RAG Pipeline App", layout="wide")
+
+    # Add page selection
+    page = st.sidebar.radio("Select Rag", ["Simple RAG", "RAG with Reranking"])
+
+    if page == "Simple RAG":
+        run_simple_rag()
+    else:
+        run_reranking_rag()
+
+
+def run_simple_rag():
+    st.title("Simple RAG")
 
     # Model Selection
     st.sidebar.header("Model Selection")
@@ -318,6 +349,136 @@ def main():
                     with st.expander("View Full Query Details"):
                         st.markdown("**Query:**")
                         st.text(result["query"])
+                        st.markdown("**System Message:**")
+                        st.text(system_message)
+                        st.markdown("**Model Configuration:**")
+                        st.json(params)
+
+
+def run_reranking_rag():
+    st.title("RAG with Reranking")
+
+    st.sidebar.header("Model Selection")
+
+    embedding_model = st.sidebar.selectbox(
+        "Embedding Model",
+        options=list(SimpleRAGApp.EMBEDDING_MODELS.keys()),
+        key="rerank_embed",
+    )
+
+    llm_model = st.sidebar.selectbox(
+        "Language Model", options=list(SimpleRAGApp.LLM_MODELS.keys()), key="rerank_llm"
+    )
+
+    reranker_model = st.sidebar.selectbox(
+        "Reranker Model", options=list(SimpleRAGApp.RERANKERS.keys())
+    )
+
+    st.sidebar.subheader("System Message")
+    default_system_message = """You are an AI assistant that provides accurate and helpful answers
+    based on the given context. Your responses should be:
+    1. Focused on the provided context
+    2. Clear and concise
+    3. Accurate and relevant to the question
+    4. Based only on the information given"""
+
+    system_message = st.sidebar.text_area(
+        "Edit System Message",
+        value=default_system_message,
+        height=150,
+        key="rerank_system_msg",
+    )
+
+    # Pipeline Parameters
+    with st.sidebar.expander("Pipeline Parameters"):
+        chunk_size = st.slider("Chunk Size", 500, 8000, 4000, 100, key="rerank_chunk")
+        chunk_overlap = st.slider(
+            "Chunk Overlap", 0, 1000, 200, 50, key="rerank_overlap"
+        )
+        k = st.slider("Initial Retrieved Documents (k)", 1, 20, 10, key="rerank_k")
+        reranking_k = st.slider("Reranked Documents (k)", 1, 10, 5, key="final_k")
+        max_tokens = st.slider("Max Tokens", 64, 1024, 512, 64, key="rerank_tokens")
+        temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1, key="rerank_temp")
+        top_k = st.slider("Top-k", 1, 100, 50, 1, key="rerank_topk")
+        top_p = st.slider("Top-p", 0.1, 1.0, 0.95, 0.05, key="rerank_topp")
+
+    params = {
+        "embedding_model": embedding_model,
+        "llm_model": llm_model,
+        "reranker_model": reranker_model,
+        "system_message": system_message,
+        "chunk_size": chunk_size,
+        "chunk_overlap": chunk_overlap,
+        "k": k,
+        "reranking_k": reranking_k,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "top_k": top_k,
+        "top_p": top_p,
+        "use_reranking": True,
+    }
+
+    # Update RAG app when parameters change
+    if "rerank_app" not in st.session_state or st.sidebar.button(
+        "Update Configuration"
+    ):
+        with st.spinner("Updating configuration and loading models..."):
+            if "rerank_app" in st.session_state:
+                st.session_state.rerank_app.clean_up_resources()
+            st.session_state.rerank_app = SimpleRAGApp(params)
+            st.sidebar.success("Configuration updated!")
+
+    # Main interface with tabs
+    tab1, tab2 = st.tabs(["Document Processing", "Question Answering"])
+
+    with tab1:
+        st.header("Upload Documents")
+        uploaded_files = st.file_uploader(
+            "Upload PDF, TXT, or MD files",
+            type=["pdf", "txt", "md"],
+            accept_multiple_files=True,
+            key="rerank_upload",
+        )
+
+        if uploaded_files:
+            if st.button("Process Documents", key="rerank_process"):
+                with st.spinner("Processing documents..."):
+                    documents = st.session_state.rerank_app.process_documents(
+                        uploaded_files
+                    )
+                    st.success(f"Successfully processed {len(documents)} documents")
+
+    with tab2:
+        st.header("Ask Questions")
+        query = st.text_input("Enter your question:", key="rerank_query")
+
+        if query:
+            if st.button("Get Answer", key="rerank_answer"):
+                with st.spinner("Generating answer..."):
+                    # Get pre-reranking results
+                    rerank_result = st.session_state.rerank_app.query_documents(query)
+
+                    # Display answer
+                    st.markdown("### Answer")
+                    st.write(rerank_result["answer"])
+
+                    # Display retrieved documents in an expander
+                    with st.expander("View Retrieved Context  (After Reranking)"):
+                        for i, (doc, metadata) in enumerate(
+                            zip(
+                                rerank_result["retrieved_documents"],
+                                rerank_result["retrieved_metadata"],
+                            )
+                        ):
+                            st.markdown(
+                                f"**Document {i+1}** (Source: {metadata.get('doc_id', 'Unknown')})"
+                            )
+                            st.text(doc)
+
+                    # Display full context in an expander
+                    with st.expander("View Full Query Details"):
+                        st.markdown("**Query:**")
+                        st.text(rerank_result["query"])
                         st.markdown("**System Message:**")
                         st.text(system_message)
                         st.markdown("**Model Configuration:**")
