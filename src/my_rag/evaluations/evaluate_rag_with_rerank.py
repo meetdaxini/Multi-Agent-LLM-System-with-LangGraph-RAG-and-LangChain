@@ -21,28 +21,32 @@ from my_rag.components.vectorstores.chroma_store import (
     ChromaVectorStore,
     CollectionMode,
 )
+from my_rag.components.pipeline.reranker import RerankerStep
+from my_rag.components.reranking.ragatouille_colbert_reranker import ColBERTReranker
+from my_rag.evaluations.evaluate_rag import RAGEvaluator
 import configparser
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class RAGEvaluationConfig:
+class RagWithRerankEvalConfig:
     """Configuration for RAG evaluation"""
 
     dataset_configs: List[Dict[str, Any]]
     embedding_model_configs: List[Dict[str, Any]]
     llm_model_configs: List[Dict[str, Any]]
     max_k: int = 5
+    rereank_max_k: int = 5
     chunk_size: int = 2000
     chunk_overlap: int = 250
     output_dir: str = "results"
 
 
-class RAGEvaluator:
+class RagWithRerankEval(RAGEvaluator):
     """Evaluates complete RAG pipelines including generation"""
 
-    def __init__(self, config: RAGEvaluationConfig):
+    def __init__(self, config: RagWithRerankEvalConfig):
         self.config = config
 
     def _create_pipeline(
@@ -100,6 +104,8 @@ class RAGEvaluator:
             collection_name=alphanumeric_string(f"eval_{embedding_config['name']}"),
             mode=CollectionMode.DROP_IF_EXISTS,
         )
+        reranker = ColBERTReranker()
+
         return RAGPipeline(
             [
                 DocumentProcessor(
@@ -117,51 +123,15 @@ class RAGEvaluator:
                     instruction=embedding_config.get("query_instruction"),
                 ),
                 Retriever(vector_store=vector_store, k=self.config.max_k),
+                RerankerStep(
+                    reranker=reranker,
+                    k=min(self.config.max_k, self.config.rereank_max_k),
+                ),
                 Generator.from_config(
                     llm=llm_model, config=llm_config["generator_config"]
                 ),
             ]
         )
-
-    def evaluate_models(
-        self,
-        embedding_config: Dict[str, Any],
-        llm_config: Dict[str, Any],
-        dataset: Dict[str, Any],
-    ) -> pd.DataFrame:
-        """Evaluates a specific combination of embedding model and LLM"""
-
-        logger.info(
-            f"Evaluating embedding model: {embedding_config['name']} with LLM: {llm_config['name']}"
-        )
-
-        pipeline = self._create_pipeline(embedding_config, llm_config)
-
-        # Run pipeline
-        pipeline_data = pipeline.run(
-            documents=dataset["documents"],
-            document_ids=dataset["document_ids"],
-            queries=dataset["queries"],
-        )
-
-        # Prepare results
-        results = []
-        for i, (query, answer) in enumerate(
-            zip(dataset["queries"], pipeline_data.generated_responses)
-        ):
-            result = {
-                "question": query,
-                "ideal_answer": dataset.get("ideal_answers")[i],
-                "llm_generated_answer": answer,
-                "document_id": dataset["actual_doc_ids"][i],
-                "retrieved_document_ids": [
-                    m["doc_id"] for m in pipeline_data.retrieved_metadata[i]
-                ],
-                "contexts": pipeline_data.retrieved_documents[i],
-            }
-            results.append(result)
-
-        return pd.DataFrame(results)
 
     def evaluate_all(self):
         """Evaluates all model combinations across all datasets"""
@@ -182,7 +152,7 @@ class RAGEvaluator:
                     # Save results
                     output_path = (
                         Path(self.config.output_dir)
-                        / f'rag_evaluations_embedder_{embedding_config["name"].replace("/", "_").replace(":", "_")}_llm_{llm_config["name"].replace("/", "_").replace(":", "_")}_dataset_{dataset_config["name"]}.xlsx'
+                        / f'rag_evaluations_with_reank_embedder_{embedding_config["name"].replace("/", "_").replace(":", "_")}_llm_{llm_config["name"].replace("/", "_").replace(":", "_")}_dataset_{dataset_config["name"]}.xlsx'
                     )
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     results_df.to_excel(output_path, index=False)
@@ -205,21 +175,22 @@ def main():
     )
 
     # Create evaluation config
-    eval_config = RAGEvaluationConfig(
+    eval_config = RagWithRerankEvalConfig(
         dataset_configs=config["datasets"],
         embedding_model_configs=config["embedding_models"],
         llm_model_configs=config["llm_models"],
         max_k=config.get("max_k", 5),
+        rereank_max_k=config.get("rereank_max_k", 5),
         chunk_size=config.get("chunk_size", 2000),
         chunk_overlap=config.get("chunk_overlap", 250),
         output_dir=config.get("output_dir", "results"),
     )
 
     # Run evaluation
-    evaluator = RAGEvaluator(eval_config)
+    evaluator = RagWithRerankEval(eval_config)
     evaluator.evaluate_all()
 
-    logging.info("RAG evaluation completed successfully")
+    logging.info("RAG with rerank evaluation completed successfully")
 
 
 if __name__ == "__main__":

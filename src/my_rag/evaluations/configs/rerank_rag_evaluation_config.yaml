@@ -90,7 +90,10 @@ llm_models:
         anthropic_version: bedrock-2023-05-31
 
 
-max_k: 5
+
+
+max_k: 10
+rereank_max_k: 5
 chunk_size: 4000
 chunk_overlap: 200
-output_dir: "results/rag_evaluations"
+output_dir: "results/rerank_rag_evaluations"

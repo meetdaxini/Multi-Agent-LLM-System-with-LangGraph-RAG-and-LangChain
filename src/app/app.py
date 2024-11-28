@@ -26,7 +26,7 @@ from my_rag.components.reranking.ragatouille_colbert_reranker import ColBERTRera
 
 class SimpleRAGApp:
     EMBEDDING_MODELS = {
-        "MiniLM-L6": "sentence-transformers/all-MiniLM-L6-v2",
+        "All-MiniLM-L6": "sentence-transformers/all-MiniLM-L6-v2",
         "Amazon Titan Embed text v2": "amazon.titan-embed-text-v2:0",
         "MixedBread Embed Large v1": "mixedbread-ai/mxbai-embed-large-v1",
         "Stella 1.5B": "dunzhang/stella_en_1.5B_v5",
