@@ -42,9 +42,9 @@ class AWSBedrockLLM(BaseLLM):
     ) -> str:
         """Generate text using messages."""
         body_content = {
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "top_p": top_p,
+            "max_tokens": 1000,
+            "temperature": 1.0,
+            "top_p": 0.95,
             "system": "\n".join(
                 [
                     message["content"]
@@ -76,15 +76,15 @@ class AWSBedrockLLM(BaseLLM):
         messages = [
             {
                 "role": "user",
-                "content": f"Please summarize the following text:\n\n{text}",
+                "content": f""""Here is a sub-set of documents. Give a detailed summary of the content provided. Documents:{text}""",
             }
         ]
 
         return self.generate(
             messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
+            max_tokens=1000,
+            temperature=1.0,
+            top_p=0.95,
             **kwargs,
         )
 

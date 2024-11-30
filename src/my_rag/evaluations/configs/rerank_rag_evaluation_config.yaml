@@ -28,12 +28,6 @@ embedding_models:
     query_instruction: "Instruct: Given a web search query, retrieve relevant passages that answer the query.\nQuery:"
     model_kwargs:
       trust_remote_code: true
-  - name: "dunzhang/stella_en_1.5B_v5"
-    batch_size: 2
-    query_instruction: "Instruct: Given a web search query, retrieve relevant passages that answer the query.\nQuery:"
-    model_kwargs:
-      trust_remote_code: true
-      load_in_8bit: true
   - name: "sentence-transformers/all-MiniLM-L6-v2"
     batch_size: 100
   - name: "mixedbread-ai/mxbai-embed-large-v1"
@@ -46,27 +40,6 @@ embedding_models:
 
 
 llm_models:
-  - name: "meta-llama/Meta-Llama-3-8B-Instruct"
-    model_kwargs:
-      trust_remote_code: true
-      load_in_8bit: true
-      device: "cuda"
-      device_map: "auto"
-    generator_config:
-      system_message: |
-        You are an AI assistant that provides accurate and helpful answers
-        based on the given context. Your responses should be:
-        1. Focused on the provided context
-        2. Clear and concise
-        3. Accurate and relevant to the question
-        4. Based only on the information given
-      generation_config:
-        max_tokens: 512
-        temperature: 0.7
-        top_k: 50
-        top_p: 0.95
-        early_stopping: true
-        no_repeat_ngram_size: 3
   - name: "anthropic.claude-3-5-sonnet-20240620-v1:0"
     instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
     query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
@@ -84,16 +57,38 @@ llm_models:
         4. Based only on the information given
       generation_config:
         max_tokens: 512
-        temperature: 0.7
+        temperature: 0.1
         top_k: 50
-        top_p: 0.95
+        top_p: 0.9
         anthropic_version: bedrock-2023-05-31
+  # - name: "meta-llama/Meta-Llama-3-8B-Instruct"
+  #   model_kwargs:
+  #     trust_remote_code: true
+  #     load_in_8bit: true
+  #     device: "cuda"
+  #     device_map: "auto"
+  #   generator_config:
+  #     system_message: |
+  #       You are an AI assistant that provides accurate and helpful answers
+  #       based on the given context. Your responses should be:
+  #       1. Focused on the provided context
+  #       2. Clear and concise
+  #       3. Accurate and relevant to the question
+  #       4. Based only on the information given
+  #     generation_config:
+  #       max_tokens: 512
+  #       temperature: 0.1
+  #       top_k: 50
+  #       top_p: 0.9
+  #       early_stopping: true
+  #       no_repeat_ngram_size: 3
 
 
 
-
-max_k: 10
+max_k: 15
 rereank_max_k: 5
 chunk_size: 4000
 chunk_overlap: 200
 output_dir: "results/rerank_rag_evaluations"
+
+# PYTHONPATH=/home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/src /home/ubuntu/miniconda3/envs/nvembed/bin/python /home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/src/my_rag/evaluations/evaluate_rag_with_rerank.py --config src/my_rag/evaluations/configs/rerank_rag_evaluation_config.yaml
