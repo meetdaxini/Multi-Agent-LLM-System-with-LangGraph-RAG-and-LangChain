@@ -1,6 +1,5 @@
 ## Instruction for The streamlit UI app
 
-
 conda activate my_rag
 
 # in one terminal:
