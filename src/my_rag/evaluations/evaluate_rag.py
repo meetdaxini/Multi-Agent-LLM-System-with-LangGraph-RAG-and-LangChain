@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from my_rag.evaluations.evaluator import get_dataset_loader
 from my_rag.components.pipeline.document_processor import DocumentProcessor
+from my_rag.components.embeddings.aws_embedding import AWSBedrockEmbedding
 from my_rag.components.pipeline.embedder import DocumentEmbedder, QueryEmbedder
 from my_rag.components.pipeline.retriever import Retriever
 from my_rag.components.pipeline.generator import Generator
@@ -15,10 +16,12 @@ from my_rag.components.pipeline.rag_pipeline import RAGPipeline
 from my_rag.components.utils import alphanumeric_string
 from my_rag.components.embeddings.huggingface_embedding import HuggingFaceEmbedding
 from my_rag.components.llms.huggingface_llm import HuggingFaceLLM
+from my_rag.components.llms.aws_llm import AWSBedrockLLM
 from my_rag.components.vectorstores.chroma_store import (
     ChromaVectorStore,
     CollectionMode,
 )
+import configparser
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,6 @@ class RAGEvaluationConfig:
     dataset_configs: List[Dict[str, Any]]
     embedding_model_configs: List[Dict[str, Any]]
     llm_model_configs: List[Dict[str, Any]]
-    generator_config: Dict[str, Any]
     max_k: int = 5
     chunk_size: int = 2000
     chunk_overlap: int = 250
@@ -48,16 +50,50 @@ class RAGEvaluator:
     ):
         """Creates RAG pipeline with both retrieval and generation components"""
 
-        # Initialize embedding model
-        embedding_model = HuggingFaceEmbedding(
-            model_name=embedding_config["name"],
-            **embedding_config.get("model_kwargs", {}),
-        )
+        if embedding_config.get("model_kwargs", {}).get("aws"):
+            config_file = embedding_config.get("model_kwargs", {}).get("aws_creds_file")
+            config_name = embedding_config.get("model_kwargs", {}).get(
+                "aws_config_name"
+            )
+            config = configparser.ConfigParser()
+            config.read(config_file)
+            aws_access_key = config[config_name]["aws_access_key_id"]
+            aws_secret_key = config[config_name]["aws_secret_access_key"]
+            aws_session_token = config[config_name]["aws_session_token"]
+            region = config[config_name]["region"]
+            embedding_model = AWSBedrockEmbedding(
+                model_id=embedding_config["name"],
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key,
+                aws_session_token=aws_session_token,
+                region_name=region,
+            )
+        else:
+            embedding_model = HuggingFaceEmbedding(
+                model_name=embedding_config["name"],
+                **embedding_config.get("model_kwargs", {}),
+            )
 
-        # Initialize LLM
-        llm_model = HuggingFaceLLM(
-            model_name=llm_config["name"], **llm_config.get("model_kwargs", {})
-        )
+        if llm_config.get("model_kwargs", {}).get("aws"):
+            config_file = llm_config.get("model_kwargs", {}).get("aws_creds_file")
+            config_name = llm_config.get("model_kwargs", {}).get("aws_config_name")
+            config = configparser.ConfigParser()
+            config.read(config_file)
+            aws_access_key = config[config_name]["aws_access_key_id"]
+            aws_secret_key = config[config_name]["aws_secret_access_key"]
+            aws_session_token = config[config_name]["aws_session_token"]
+            region = config[config_name]["region"]
+            llm_model = AWSBedrockLLM(
+                model_id=llm_config["name"],
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key,
+                aws_session_token=aws_session_token,
+                region_name=region,
+            )
+        else:
+            llm_model = HuggingFaceLLM(
+                model_name=llm_config["name"], **llm_config.get("model_kwargs", {})
+            )
 
         # Initialize vector store
         vector_store = ChromaVectorStore(
@@ -82,7 +118,7 @@ class RAGEvaluator:
                 ),
                 Retriever(vector_store=vector_store, k=self.config.max_k),
                 Generator.from_config(
-                    llm=llm_model, config=self.config.generator_config
+                    llm=llm_model, config=llm_config["generator_config"]
                 ),
             ]
         )
@@ -146,7 +182,7 @@ class RAGEvaluator:
                     # Save results
                     output_path = (
                         Path(self.config.output_dir)
-                        / f'rag_evaluations_{embedding_config["name"].replace("/", "_")}_{llm_config["name"].replace("/", "_")}.xlsx'
+                        / f'rag_evaluations_embedder_{embedding_config["name"].replace("/", "_").replace(":", "_")}_llm_{llm_config["name"].replace("/", "_").replace(":", "_")}_dataset_{dataset_config["name"]}.xlsx'
                     )
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     results_df.to_excel(output_path, index=False)
@@ -173,7 +209,6 @@ def main():
         dataset_configs=config["datasets"],
         embedding_model_configs=config["embedding_models"],
         llm_model_configs=config["llm_models"],
-        generator_config=config["generator_config"],
         max_k=config.get("max_k", 5),
         chunk_size=config.get("chunk_size", 2000),
         chunk_overlap=config.get("chunk_overlap", 250),

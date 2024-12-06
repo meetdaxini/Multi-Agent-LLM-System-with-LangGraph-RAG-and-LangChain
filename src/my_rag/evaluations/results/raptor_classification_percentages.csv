@@ -1,0 +1,5 @@
+embedding_model,llm_model,reranking_model,dataset,total,correct,incorrect,partially_correct,correct_percentage,incorrect_percentage,partially_correct_percentage
+dunzhang_stella_en_1.5B_v5,anthropic.claude-3-5-sonnet-20240620-v1_0,,HuggingFace QA Dataset,65,65,0,0,100.0,0.0,0.0
+dunzhang_stella_en_1.5B_v5,anthropic.claude-3-5-sonnet-20240620-v1_0,,PubMed filtered Dataset,13,10,0,3,76.92,0.0,23.08
+mixedbread-ai_mxbai-embed-large-v1,anthropic.claude-3-5-sonnet-20240620-v1_0,,HuggingFace QA Dataset,65,64,1,0,98.46,1.54,0.0
+mixedbread-ai_mxbai-embed-large-v1,anthropic.claude-3-5-sonnet-20240620-v1_0,,PubMed filtered Dataset,13,9,1,3,69.23,7.69,23.08

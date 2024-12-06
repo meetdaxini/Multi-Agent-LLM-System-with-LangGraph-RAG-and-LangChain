@@ -1,7 +1,7 @@
 import json
 import boto3
 from botocore.exceptions import ClientError
-from typing import Optional, List
+from typing import Optional, List, Any
 from .base import BaseLLM
 from ..chat_templates import Message
 
@@ -11,7 +11,7 @@ class AWSBedrockLLM(BaseLLM):
 
     def __init__(
         self,
-        model_id: str,
+        model_id: str = "anthropic.claude-3-5-sonnet-20240620-v1:0",
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         aws_session_token: Optional[str] = None,
@@ -21,13 +21,12 @@ class AWSBedrockLLM(BaseLLM):
         self.model_id = model_id
 
         try:
-            self.session = boto3.Session(
+            self.client = boto3.client(
+                "bedrock-runtime",
                 aws_access_key_id=aws_access_key_id,
                 aws_secret_access_key=aws_secret_access_key,
                 aws_session_token=aws_session_token,
-            )
-            self.client = self.session.client(
-                "bedrock-runtime", region_name=region_name
+                region_name=region_name,
             )
 
         except Exception as e:
@@ -35,38 +34,58 @@ class AWSBedrockLLM(BaseLLM):
 
     def generate(
         self,
-        prompt: str,
+        messages: Any,
         max_tokens: int = 256,
         temperature: float = 1.0,
         top_p: float = 0.95,
         **kwargs,
     ) -> str:
-        """Generate text using basic prompt."""
+        """Generate text using messages."""
         body_content = {
-            "anthropic_version": self.model_id,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "top_p": top_p,
-            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1000,
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "system": "\n".join(
+                [
+                    message["content"]
+                    for message in messages
+                    if message["role"] == "system"
+                ]
+            ),
+            "messages": [
+                message for message in messages if message["role"] != "system"
+            ],
+            **kwargs,
         }
-
-        try:
-            response = self.client.invoke_model(
-                modelId=self.model_id, body=json.dumps(body_content)
-            )
-            response_body = json.loads(response["body"].read())
-            return response_body["content"][0]["text"]
-        except ClientError as e:
-            raise Exception(f"AWS Bedrock API error: {str(e)}")
+        response = self.client.invoke_model(
+            modelId=self.model_id,
+            body=json.dumps(body_content),
+        )
+        response_body = json.loads(response["body"].read())
+        return response_body["content"][0]["text"]
 
     def generate_summary(
-        self, text: str, max_tokens: int = 150, temperature: float = 0.7, **kwargs
+        self,
+        text: str,
+        max_tokens: int = 150,
+        temperature: float = 0.7,
+        top_p: float = 0.95,
+        **kwargs,
     ) -> str:
         """Generate a summary of the input text."""
-        prompt = f"Please summarize the following text:\n\n{text}"
+        messages = [
+            {
+                "role": "user",
+                "content": f""""Here is a sub-set of documents. Give a detailed summary of the content provided. Documents:{text}""",
+            }
+        ]
 
         return self.generate(
-            prompt=prompt, max_tokens=max_tokens, temperature=temperature, **kwargs
+            messages=messages,
+            max_tokens=1000,
+            temperature=1.0,
+            top_p=0.95,
+            **kwargs,
         )
 
     def generate_response_with_context(
@@ -86,23 +105,13 @@ class AWSBedrockLLM(BaseLLM):
             },
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion:\n{prompt}"},
         ]
-
-        body_content = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "top_p": top_p,
-            "messages": messages,
-        }
-
-        try:
-            response = self.client.invoke_model(
-                modelId=self.model_id, body=json.dumps(body_content)
-            )
-            response_body = json.loads(response["body"].read())
-            return response_body["content"][0]["text"]
-        except ClientError as e:
-            raise Exception(f"AWS Bedrock API error: {str(e)}")
+        return self.generate(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            **kwargs,
+        )
 
     def generate_with_template(
         self,
@@ -116,22 +125,13 @@ class AWSBedrockLLM(BaseLLM):
         formatted_messages = [
             {"role": msg.role, "content": msg.content} for msg in messages
         ]
-        body_content = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "top_p": top_p,
-            "messages": formatted_messages,
-        }
-
-        try:
-            response = self.client.invoke_model(
-                modelId=self.model_id, body=json.dumps(body_content)
-            )
-            response_body = json.loads(response["body"].read())
-            return response_body["content"][0]["text"]
-        except ClientError as e:
-            raise Exception(f"AWS Bedrock API error: {str(e)}")
+        return self.generate(
+            messages=formatted_messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            **kwargs,
+        )
 
     def generate_template_response_with_context(
         self,
@@ -151,7 +151,6 @@ class AWSBedrockLLM(BaseLLM):
                 "using the given context. Always base your answers on the "
                 "provided context and be precise and concise."
             )
-
         # Create context-enhanced user message
         user_message = f"Context:\n{context}\n\nQuestion:\n{query}"
         # Create messages list

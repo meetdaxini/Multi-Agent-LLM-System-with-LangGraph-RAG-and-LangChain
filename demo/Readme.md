@@ -1,3 +1,9 @@
-## Instruction for demo code
+## Instruction for The streamlit UI app
 
-- The streamlit or any UI app needs to be here in this folder.
+conda activate my_rag
+
+# in one terminal:
+chroma run
+
+# in another terminal:
+PYTHONPATH=src streamlit run demo/app/app.py --server.port=8888

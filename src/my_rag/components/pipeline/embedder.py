@@ -18,7 +18,7 @@ class DocumentEmbedder(PipelineStep):
 
     def run(self, pipeline_data: PipelineData) -> PipelineData:
         if not pipeline_data.documents:
-            raise ValueError("Documents must be provided for embedding")
+            return pipeline_data
 
         pipeline_data.embeddings = self.model.embed(
             pipeline_data.documents,
@@ -43,7 +43,7 @@ class QueryEmbedder(PipelineStep):
 
     def run(self, pipeline_data: PipelineData) -> PipelineData:
         if not pipeline_data.queries:
-            raise ValueError("Queries must be provided for embedding")
+            return pipeline_data
 
         pipeline_data.query_embeddings = self.model.embed(
             pipeline_data.queries,

@@ -19,7 +19,7 @@ class DocumentProcessor(PipelineStep):
 
     def run(self, pipeline_data: PipelineData) -> PipelineData:
         if not pipeline_data.documents or not pipeline_data.document_ids:
-            raise ValueError("Documents and document IDs must be provided")
+            return pipeline_data
 
         processed_chunks = []
         processed_metadata = []

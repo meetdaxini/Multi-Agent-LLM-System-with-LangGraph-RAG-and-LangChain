@@ -34,7 +34,7 @@ class Generator(PipelineStep):
         )
         self.chat_history = chat_history or []
         self.generation_config = generation_config or {
-            "max_new_tokens": 512,
+            "max_tokens": 512,
             "temperature": 0.7,
             "top_k": 50,
             "top_p": 0.95,
@@ -45,11 +45,7 @@ class Generator(PipelineStep):
     def _prepare_context_message(self, context: List[str], query: str) -> str:
         """Prepares the context and query into a formatted message"""
         context_str = "\n".join(context)
-        return (
-            f"Please answer the following question using the provided documents as context.\n\n"
-            f"Context:\n{context_str}\n\n"
-            f"Question: {query}"
-        )
+        return context_str
 
     def run(self, pipeline_data: PipelineData) -> PipelineData:
         """
@@ -61,9 +57,10 @@ class Generator(PipelineStep):
         Returns:
             Updated pipeline data with generated responses
         """
-        if not pipeline_data.queries or not pipeline_data.retrieved_documents:
-            raise ValueError("Queries and retrieved documents must be provided")
-
+        if not pipeline_data.queries:
+            return pipeline_data
+        if not pipeline_data.retrieved_documents:
+            raise "No documents retrieved"
         responses = []
         for query, docs in zip(
             pipeline_data.queries, pipeline_data.retrieved_documents

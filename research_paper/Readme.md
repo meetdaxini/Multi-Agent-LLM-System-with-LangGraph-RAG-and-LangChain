@@ -1,5 +1,2 @@
-## Instruction for research paper
+This folder contains the Latex files of the research paper as well as it compilation in .pdf format.
 
-- For your capstone project you need to write a research paper.
-- If you are submitting to any journal and conference you need to use their templates.
-- 
