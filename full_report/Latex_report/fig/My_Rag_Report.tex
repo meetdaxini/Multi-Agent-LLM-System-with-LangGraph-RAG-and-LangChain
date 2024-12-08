@@ -11,6 +11,8 @@
 \usepackage{amsmath}
 \usepackage{booktabs}
 \usepackage{microtype}
+\usepackage[inkscapelatex=false]{svg}
+
 
 \hypersetup{
    colorlinks   = true,                               %Colours links instead of ugly boxes
@@ -45,7 +47,7 @@
 	\vspace{1cm}
 	{\scshape\Large Capstone Report - Fall 2024\par}
 	\vspace{1.5cm}
-	{\huge\bfseries MyRAG - Advancing Retrieval-Augmented Generation with Comparative Analysis of Basic RAG, ColBERT Reranking, and RAPTOR Architectures \par}
+	{\huge\bfseries MyRAG - Advancing Retrieval-Augmented Generation with Comparative Analysis of Standard RAG, ColBERT Reranking, and RAPTOR Architectures \par}
 	\vspace{2cm}
 	%%%% AUTHOR(S)
 	{\Large\itshape Meet Daxini \\}\par
@@ -57,7 +59,7 @@
 
 	\vfill
 	\begin{abstract}
-Retrieval-Augmented Generation (RAG) has emerged as a powerful paradigm for providing personalized, relevant, and current information to user queries by combining large language models (LLMs) with external retrieval modules. This paper presents \textit{MyRAG}, an open-source system that unifies and compares different state-of-the-art RAG architectures and retrieval techniques on two datasets. We explore embeddings, vector databases, and advanced retrieval methods, including ColBERT-based re-ranking and the hierarchical summarization-based RAPTOR architecture. By evaluating MyRAG on the BioASQ and Hugging Face Document QA datasets, we demonstrate how different configurations impact retrieval accuracy and downstream QA performance. The results offer insights into optimizing RAG pipelines, guiding both practitioners and researchers toward more efficient and effective retrieval-augmented generation.
+Retrieval-Augmented Generation (RAG) has emerged as a powerful paradigm for providing personalized, relevant, and current information to user queries by combining large language models (LLMs) with external retrieval modules. This paper presents \textit{MyRAG}, an open-source system that unifies and compares different state-of-the-art RAG architectures and retrieval techniques. This paper explores embeddings, vector databases, and advanced retrieval methods, including ColBERT-based reranking and the hierarchical summarization-based RAPTOR architecture. By evaluating MyRAG on the BioASQ and Hugging Face Document QA datasets, demonstrates how different configurations impact retrieval accuracy and downstream QA performance. The results offer insights into optimizing RAG pipelines, guiding both practitioners and researchers toward more efficient and effective retrieval-augmented generation.
 	\end{abstract}
 	\vfill
 % Bottom of the page
@@ -67,22 +69,30 @@ Retrieval-Augmented Generation (RAG) has emerged as a powerful paradigm for prov
 % ------------------------------------------------------------------------------------------------------------------------
 \section{Introduction}
 
-The exponential growth of digital information has increased the demand for intelligent systems that can efficiently retrieve relevant context and answer complex questions. Large Language Models (LLMs) often possess extensive parametric knowledge but may lack reliable, up-to-date information. Retrieval-Augmented Generation (RAG) has gained prominence as a solution to this challenge, bridging large-scale language understanding with external retrieval components to produce more grounded and accurate responses \cite{lewis2020retrieval, guu2020realm, izacard2022atlas}.
+The exponential growth of digital information has increased the demand for intelligent systems that can efficiently retrieve relevant context and answer complex questions. Large Language Models (LLMs) often possess extensive parametric knowledge, but may lack reliable, up-to-date information. Retrieval-Augmented Generation (RAG) has gained prominence as a solution to this challenge, bridging large-scale language understanding with external retrieval components to produce more grounded and accurate responses \cite{lewis2020retrieval, guu2020realm}.
 
-In RAG pipelines, the LLM accesses external knowledge sources, retrieving relevant documents or chunks to augment its prompt. This approach enhances the model’s factual accuracy, reduces hallucinations, and updates knowledge without retraining the entire model. As context window sizes continue to expand \cite{liu2023lost}, it is increasingly practical to provide LLMs with larger, more diverse sets of retrieved evidence.
+In RAG pipelines, the LLM accesses external knowledge sources, retrieving relevant documents or chunks to augment its prompt. This approach enhances the model’s factual accuracy, reduces hallucinations, and updates knowledge without retraining the entire model. As the sizes of the context window continue to expand \cite{liu2023lost}, it is increasingly practical to provide LLMs with larger and more diverse sets of the retrieved context.
 
-Yet, not all retrieval pipelines are created equal. Various embedding models, vector databases, and advanced retrieval techniques can be combined to form a RAG system. For instance, ColBERT \cite{khattab2020colbert} re-ranking can refine retrieved documents, while the RAPTOR architecture \cite{wu2021recursively, raptor2024} organizes and summarizes documents hierarchically. Understanding the trade-offs between these methods is key to building robust, scalable RAG systems.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\linewidth]{StandardRag.pdf} 
+    \caption{Flow chart illustrating the standard RAG pipeline.}
+    \label{fig:standard_rag_flow}
+\end{figure}
 
-This paper introduces \textit{MyRAG}, an open-source framework designed to benchmark and compare multiple retrieval and augmentation strategies systematically. We evaluate embeddings, vector stores, and advanced retrieval enhancements like ColBERT re-ranking and RAPTOR summarization, applying them on the BioASQ \cite{bioasq2023} and Hugging Face Document QA datasets \cite{huggingface2024docqa}. Our experiments aim to provide a clearer understanding of how these components influence retrieval accuracy and end-to-end QA performance.
+
+Yet, not all retrieval pipelines are created equal. Various embedding models, vector databases, and advanced retrieval techniques can be combined to form a RAG system. For instance, This paper explores How Standard Rag with ColBERT \cite{khattab2020colbert} re-ranking can refine retrieved documents, while the RAPTOR architecture \cite{wu2021recursively, raptor2024} organizes and summarizes documents hierarchically. Understanding the trade-offs between these methods is key to building robust and scalable RAG systems.
+
+This paper introduces \textit{MyRAG}, an open-source framework designed to compare multiple retrieval and augmented generation strategies systematically. We evaluate embeddings, vector stores, and advanced retrieval enhancements like ColBERT re-ranking and RAPTOR summarization, applying them on the BioASQ \cite{bioasq2023} and Hugging Face Document QA datasets \cite{huggingface2024docqa}. Our experiments aim to provide a clearer understanding of how these components influence retrieval accuracy and end-to-end QA performance.
 
 %----------------- Problem Statement -----------------%
 \section{Problem Statement}
 
-Despite the abundance of RAG methods, there is a need for a comprehensive comparison that quantifies the impact of different retrieval architectures on QA tasks. Existing solutions often compare only a subset of methods or focus on a single dataset. MyRAG addresses this gap by integrating multiple retrieval approaches, including:
+Despite the abundance of RAG methods, there is a need for a comprehensive comparison that quantifies the impact of different retrieval architectures on QA tasks. MyRAG integrates multiple retrieval approaches, including:
 
-1. \textbf{Embedding Models:} NV-Embed-v2, Stella 1.5B, MXBai Large, Amazon Titan, and all-MiniLM-L6-v2 with varying sizes and dimensionalities.
-2. \textbf{Vector Databases:} Chroma and DeepLake, providing diverse indexing and similarity search strategies (e.g., cosine, L2) and supporting hierarchical navigable small world (HNSW) graphs.
-3. \textbf{Reranking Models:} Incorporation of ColBERT \cite{khattab2020colbert}, known for efficient and effective passage re-ranking.
+1. \textbf{Embedding Models:} NV-Embed-v2, Stella 1.5B, MXBai Large, Amazon Titan and all-MiniLM-L6-v2 with varying sizes and parameters.
+2. \textbf{Vector Databases:} Chroma and DeepLake, providing diverse indexing and similarity search strategies (e.g., cosine, L1, L2) and supporting hierarchical navigable small world (HNSW) graphs.
+3. \textbf{Reranking Models:} Incorporation of ColBERT \cite{khattab2020colbert}, known for efficient and effective passage reranking.
 4. \textbf{RAPTOR Architecture:} Integration of RAPTOR, a tree-structured retrieval pipeline that summarizes documents at multiple granularity levels \cite{wu2021recursively, raptor2024}.
 
 By testing different configurations and systematically evaluating their performance, we aim to identify best practices for building scalable and effective RAG solutions that cater to both resource-rich and constrained environments.
@@ -90,7 +100,7 @@ By testing different configurations and systematically evaluating their performa
 %----------------- Related Work -----------------%
 \section{Related Work}
 
-\textbf{RAG Systems:} Retrieval-Augmented Generation models like RAG \cite{lewis2020retrieval}, REALM \cite{guu2020realm}, and Atlas \cite{izacard2022atlas} have demonstrated improved factual accuracy and adaptability. These models typically employ neural or sparse retrieval followed by cross-attention fusion into the LLM. 
+\textbf{RAG Systems:} Retrieval-Augmented Generation models like RAG \cite{lewis2020retrieval} and REALM \cite{guu2020realm} have demonstrated improved factual accuracy and adaptability. These models typically employ neural or sparse retrieval followed by cross-attention fusion into the LLM. 
 
 \textbf{Embedding Models:} Sentence-BERT \cite{reimers2019sentence} and domain-specific embedding models have enhanced semantic retrieval. Dense Passage Retrieval (DPR) \cite{karpukhin2020dense} and ColBERT \cite{khattab2020colbert} leverage contextualized embeddings for more accurate retrieval.
 
@@ -101,14 +111,14 @@ By testing different configurations and systematically evaluating their performa
 MyRAG builds on these works by offering a unified platform to compare multiple embeddings, vector stores, and retrieval strategies, including ColBERT and RAPTOR, on common benchmarks.
 
 %----------------- MyRag System -----------------%
-\section{MyRAG System}
+\section{MyRAG}
 
 The MyRAG system provides a flexible pipeline to switch between embedding models, vector stores, and retrieval techniques. Key components include:
 
 \begin{figure}[h]
 	\centering
-	\includegraphics[scale=0.1]{raptor_final.png}
-	\caption{RAPTOR Architecture as integrated in MyRAG}
+	\includegraphics[width=\linewidth]{Raptor.pdf}
+	\caption{Flow chart of RAPTOR Architecture as integrated in MyRAG}
 	\label{fig:raptor}
 \end{figure}
 
@@ -168,11 +178,11 @@ Table \ref{tab:retrieval_accuracies} shows retrieval accuracies at different $k$
 
 \subsection{End-to-End QA Performance}
 
-We assess end-to-end performance by feeding retrieved documents into an LLM (e.g., Llama 2, Mixtral, Gemma, or open-source Hugging Face models). Table \ref{tab:comprehensive_results} reports comprehensive QA results. We find that RAPTOR-assisted retrieval outperforms basic RAG setups, especially on complex multi-hop questions where hierarchical summaries guide the model to more coherent context.
+We assess end-to-end performance by feeding retrieved documents into an LLM (e.g., Llama 2, Mixtral, Gemma, or open-source Hugging Face models). Table \ref{tab:comprehensive_results} reports comprehensive QA results. We find that RAPTOR-assisted retrieval outperforms Standard RAG setups, especially on complex multi-hop questions where hierarchical summaries guide the model to more coherent context.
 
 \begin{table}[h]
     \centering
-    \caption{Comprehensive Performance Comparison Across Models (Basic RAG vs. Reranking)}
+    \caption{Comprehensive Performance Comparison Across Models (Standard RAG vs. Reranking)}
     \small
     \begin{tabular}{llccccc}
     \hline
