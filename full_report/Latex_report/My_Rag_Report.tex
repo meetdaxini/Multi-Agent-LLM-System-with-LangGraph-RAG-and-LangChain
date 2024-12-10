@@ -60,7 +60,7 @@
 
 	\vfill
 	\begin{abstract}
-Retrieval-Augmented Generation (RAG) has emerged as a powerful paradigm for providing personalized, relevant, and current information to user queries by combining large language models (LLMs) with external retrieval modules. This paper presents \textit{MyRAG}, an open-source system that unifies and compares different state-of-the-art RAG architectures and retrieval techniques. This paper explores embeddings, vector databases, and advanced retrieval methods, including ColBERT-based reranking and the hierarchical summarization-based RAPTOR architecture. By evaluating MyRAG on the BioASQ and Hugging Face Document QA datasets, demonstrates how different configurations impact retrieval accuracy and downstream QA performance. The results offer insights into optimizing RAG pipelines, guiding both practitioners and researchers toward more efficient and effective retrieval-augmented generation.
+Retrieval-Augmented Generation (RAG) has emerged as a powerful paradigm for providing personalized, relevant, and current information to user queries by combining large language models (LLMs) with external retrieval modules. This paper presents \textit{MyRAG}, an open-source system that unifies and compares different state-of-the-art RAG architectures and retrieval techniques. This paper explores embeddings, vector databases, and advanced retrieval methods, including ColBERT-based reranking and the hierarchical summarization-based RAPTOR architecture. By evaluating different datasets, it demonstrates how different configurations impact retrieval accuracy and downstream QA performance. The results offer insights into optimizing RAG pipelines, guiding both practitioners and researchers toward more efficient and effective retrieval-augmented generation.
 	\end{abstract}
 	\vfill
 % Bottom of the page
@@ -82,7 +82,7 @@ In RAG pipelines, the LLM accesses external knowledge sources, retrieving releva
 \end{figure}
 
 
-Yet, not all retrieval pipelines are created equal. Various embedding models, vector databases, and advanced retrieval techniques can be combined to form a RAG system. For instance, This paper explores How Standard Rag with ColBERT \cite{khattab2020colbert} re-ranking can refine retrieved documents, while the RAPTOR architecture \cite{wu2021recursively, raptor2024} organizes and summarizes documents hierarchically. Understanding the trade-offs between these methods is key to building robust and scalable RAG systems.
+Yet, not all retrieval pipelines are created equal. Various embedding models, databases (like graph, vector, etc), and advanced retrieval techniques can be combined to form a RAG system. For instance, This paper explores How Standard Rag with ColBERT \cite{khattab2020colbert} re-ranking can refine retrieved documents, while the RAPTOR architecture \cite{wu2021recursively, raptor2024} organizes and summarizes documents hierarchically. Understanding the trade-offs between these methods is key to building robust and scalable RAG systems.
 
 This paper introduces \textit{MyRAG}, an open-source framework designed to compare multiple retrieval and augmented generation strategies systematically. We evaluate embeddings, vector stores, and advanced retrieval enhancements like ColBERT re-ranking and RAPTOR summarization, applying them on the BioASQ \cite{bioasq2023} and Hugging Face Document QA datasets \cite{huggingface2024docqa}. Our experiments aim to provide a clearer understanding of how these components influence retrieval accuracy and end-to-end QA performance.
 
@@ -108,33 +108,100 @@ While the Massive Text Embedding Benchmark (MTEB) \cite{muennighoff2022mteb} pro
 Through this comprehensive evaluation framework, MyRAG helps practitioners select optimal combinations of embedding models (guided by MTEB's leaderboard), retrieval architectures, and implementation approaches. The framework supports both detailed technical assessment and simple, interpretable metrics that organizations need to optimize their RAG deployments across use cases and resource constraints. By offering comparison of standard RAG, ColBERT reranking, and RAPTOR approaches on multtiple datasets, MyRAG provides actionable insights for building more effective retrieval-augmented generation systems.
 
 
-\textit{MyRAG} addresses this need by providing an open-source code framework that enables direct, end-to-end comparisons of RAG approaches. By incorporating multiple embedding models, vector databases (e.g., Chroma and DeepLake), reranking strategies (e.g., ColBERT), and hierarchical retrieval architectures (e.g., RAPTOR), \textit{MyRAG} provides a clear, cohesive platform for empirical evaluation. This approach ensures that even non-experts can understand performance trade-offs through accessible and practical metrics, ultimately guiding practitioners and researchers toward more optimal and tailored RAG solutions.
+\textit{MyRAG} addresses this need by providing an open-source code framework that enables direct, end-to-end comparisons of RAG approaches. By incorporating multiple embedding models, vector databases, reranking strategy (ColBERT), and hierarchical retrieval architecture (RAPTOR), \textit{MyRAG} provides a clear, cohesive platform for empirical evaluation. This approach ensures that even non-experts can understand performance trade-offs through accessible and practical metrics, ultimately guiding practitioners and researchers toward more optimal and tailored RAG solutions.
 %----------------- MyRag System -----------------%
-\section{MyRAG}
-MyRAG builds on these works by offering a unified platform to compare multiple embeddings, vector stores, and retrieval strategies, including ColBERT and RAPTOR, on common benchmarks.
-The MyRAG system provides a flexible pipeline to switch between embedding models, vector stores, and retrieval techniques. Key components include:
+\section{Methodology}
+MyRAG builds on the works by offering a unified platform to compare multiple embedding models, vector stores, and rag architectures including ColBERT and RAPTOR and provides a flexible pipeline to switch between embedding models, vector stores, and retrieval techniques. Key components include:
 
 \subsection{Parsing Documents and Chunking}
 
-\subsection{Embedding Models}
+MyRAG employs a robust text processing pipeline for document parsing and chunking, leveraging the \texttt{RecursiveCharacterTextSplitter} from LangChain \cite{langchain2024}. This method enables efficient handling of large textual data by splitting documents into manageable, contextually coherent chunks while preserving overlap for improved information retrieval. The pipeline includes the following key functionalities:
 
-We integrate several embedding models:
 \begin{itemize}
-    \item NV-Embed-v2, Stella 1.5B, MXBai Large, Amazon Titan, all-MiniLM-L6-v2
+    \item \textbf{Customizable Chunking Parameters:} Users can specify the \texttt{chunk\_size} (default: 2000 characters) and \texttt{chunk\_overlap} (default: 250 characters) to control the size and redundancy of chunks. This ensures that relevant information is not lost at chunk boundaries, a critical factor for maintaining context in retrieval-augmented pipelines.
+
+    \item \textbf{Dynamic Splitting Based on Separators:} The chunking process supports a hierarchy of separators, including paragraph breaks (\texttt{"\textbackslash n\textbackslash n"}), line breaks (\texttt{"\textbackslash n"}), sentence endings (\texttt{". "}), and whitespace (\texttt{" "}). These separators allow adaptive splitting tailored to the structure of the input text, ensuring logical segmentation while minimizing disruption to the content.
+
+    \item \textbf{Metadata Annotation:} Each chunk is annotated with rich metadata, such as document identifiers, chunk indices, total chunk count, and source type. This metadata facilitates traceability and enables fine-grained analysis of retrieval and generation performance.
+
+
+    \item \textbf{Integration with PDF Parsing:} The system seamlessly integrates with a custom \texttt{PDFLoader} module, which extracts text content from PDF files. This module supports single and batch PDF loading, ensuring compatibility with diverse document formats often encountered in real-world applications.
+
 \end{itemize}
-These models differ in size, parameters, and performance trade-offs. We evaluate how embedding choice affects retrieval accuracy and QA outcomes.
+
+This sophisticated parsing and chunking approach not only ensures the efficient handling of long-form text but also lays the foundation for effective retrieval and augmentation workflows within the MyRAG framework.
+\subsection{Embedding Models}
+MyRAG supports a range of embedding models that integrate seamlessly with AWS Bedrock and Hugging Face Transformers \cite{huggingfacedocs, AmazonBedrockAPI2024}. These models translate textual inputs into high-dimensional vector representations, which serve as the foundation for semantic similarity-based retrieval. The system accommodates various architectures and parameter scales, allowing flexible trade-offs between accuracy, computational cost, and resource constraints.
+
+\begin{itemize}
+    \item \textbf{Hugging Face-Based Models:} Models such as NV-Embed-v2, Stella 1.5B, MXBai Large, and all-MiniLM-L6-v2 are supported via the Hugging Face Transformers library. The implementation includes automatic device management (CPU/CUDA), 8-bit quantization support, and configurable device mapping for efficient resource utilization. Key features include:
+    \begin{itemize}
+        \item Automatic normalization of embeddings using L2 normalization
+        \item Batch processing with customizable batch sizes for memory efficiency
+        \item Support for instruction-based embedding generation
+        \item Explicit memory management with CUDA cache clearing and garbage collection
+        \item Optional model configurations including trust\_remote\_code and load\_in\_8bit for quantization and memory optimization
+    \end{itemize}
+    
+    \item \textbf{Amazon Bedrock Integration:} The Amazon Titan embedding model is accessed through AWS Bedrock's runtime client api. 
+\end{itemize}
+
+Each embedding model implementation follows a consistent interface defined by the BaseEmbedding abstract class, ensuring uniform integration with the broader RAG pipeline. The system supports dynamic switching between models and handles cleanup operations to maintain efficient resource usage throughout the embedding process.
+
+These embedding strategies form a core component of MyRAG's retrieval workflow. By evaluating models across benchmark datasets, it becomes possible to determine which embedding configurations yield the best balance of retrieval accuracy, computational efficiency, and downstream QA performance.
+
 
 \subsection{Vector Databases}
 
-MyRAG supports Chroma and DeepLake, two vector databases optimized for similarity search with support for HNSW indices and cosine or L2 metrics. Initial experiments suggest that cosine similarity often performs better, though L2 metrics are also tested for completeness.
+MyRAG integrates support for Chroma \cite{chroma} and DeepLake \cite{deeplake}, two advanced vector databases specifically designed to optimize similarity search. These databases leverage \textbf{Hierarchical Navigable Small World (HNSW)} indices \cite{malkov2016efficient}, which are highly efficient for approximate nearest neighbor search. HNSW organizes vectors in a spatial domain into hierarchical clusters, enabling scalable similarity comparisons.
+
+The key functionality of HNSW is its ability to cluster vectors in \(n\)-dimensional space based on proximity. For instance, given a dataset of 5000 vectors, HNSW groups similar vectors into clusters, each represented by a centroid or a representative vector. Assuming an average cluster size of 100 vectors, this process reduces the search space to 50 representative vectors. Consequently, the computational complexity of similarity comparisons is significantly reduced, shifting from 5000 pairwise comparisons to just 50. This hierarchical organization ensures efficient retrieval without compromising accuracy.
+
+In addition to HNSW indices, both Chroma and DeepLake support similarity metrics like cosine and \(L_2\) distance, making them versatile for a wide range of use cases. Furthermore, these vector databases handle rich metadata alongside the vector representations, allowing for more nuanced queries and contextual filtering. These features collectively enhance the performance and scalability of retrieval pipelines within the MyRAG framework.
+
+
+\subsection{LLMs}
+MyRAG supports integration with both AWS Bedrock and Hugging Face Transformers-based models for text generation \cite{huggingfacedocs, AmazonBedrockAPI2024}. These Large Language Models (LLMs) serve as the backbone of the retrieval-augmented generation workflow, consuming retrieved documents as context and producing coherent, contextually grounded responses. The system implements a common interface through the BaseLLM abstract class, enabling seamless switching between different LLM backends.
+
+\begin{itemize}
+    \item \textbf{AWS Bedrock LLMs:} Models such as Anthropic's Claude variants are accessed through AWS Bedrock's runtime client API. 
+    
+    \item \textbf{Hugging Face Transformers LLMs:} Integration of models like Meta-Llama-3-8B-Instruct with features including:
+    \begin{itemize}
+        \item \textbf{Resource Management:} 
+            \begin{itemize}
+                \item Automatic CPU/CUDA device selection
+                \item 8-bit quantization support
+                \item Configurable device mapping for distributed inference
+                \item Automatic CUDA cache clearing and garbage collection
+            \end{itemize}
+    \end{itemize}
+\end{itemize}
+
+
+The system maintains consistent cleanup procedures across implementations, ensuring efficient resource management particularly important for GPU-based deployments. This standardized approach enables systematic evaluation of different LLM configurations within the broader RAG pipeline.
+
+
 
 \subsection{ColBERT Reranking}
+ColBERT \cite{khattab2020colbert} provides a reranking framework that refines retrieval results by comparing query tokens against all tokens in candidate documents, rather than relying on a single vector embedding per document. Unlike traditional embeddings, which compress each document into a single vector, ColBERT applies a late interaction mechanism to handle token-level embeddings. This approach computes similarities between each query token embedding and every token embedding in a document, ensuring that important context within a document is not lost due to over-compression.
+
+The implementation in MyRAG leverages the RAGatouille library \cite{ragatouille} to integrate ColBERT v2.0 as a re-ranking step following the initial retrieval process. After retrieving a candidate set of documents, the RAGatouille-based ColBERT implementation scores each document based on fine-grained token alignments with the query. These fine-grained comparisons enable the system to re-prioritize documents that contain subtle but crucial semantic clues. The refined ranking supports more accurate downstream retrieval-augmented generation (RAG) tasks, enhancing both precision and robustness. Through this method, MyRAG gains the ability to emphasize relevant sections of documents that might otherwise be overshadowed by broad embedding representations.
+
+The re-ranking step is implemented as a modular pipeline component, allowing for easy integration with different retrieval configurations. This modularity enables MyRAG to compare performance with and without reranking, providing insights into the impact of fine-grained token matching on overall system performance. Figures below shows how ColBert embedding document scoring for top K differs from standard rag and how it is integrated in the MyRAG pipeline
 
 
 \begin{figure}[H]
 	\centering
+	\includegraphics[width=\linewidth]{StandardRAGDocumentScoring.pdf}
+	\caption{Flow chart of Standard RAG Embeddings Document Scoring within vector database}
+	\label{fig:standard_doc_scoring}
+\end{figure}
+
+\begin{figure}[H]
+	\centering
 	\includegraphics[width=\linewidth]{Colbert.pdf}
-	\caption{Flow chart of ColBert Reranking}
+	\caption{Flow chart of ColBert Document Scoring}
 	\label{fig:colbert}
 \end{figure}
 
@@ -146,10 +213,19 @@ MyRAG supports Chroma and DeepLake, two vector databases optimized for similarit
 	\label{fig:reranking_rag}
 \end{figure}
 
-ColBERT \cite{khattab2020colbert} refines initial retrieval results by re-ranking passages based on fine-grained token-level similarities. This step often improves retrieval accuracy by ensuring that top-ranked documents are highly relevant to the query.
 
-\subsection{RAPTOR}
+\subsection{RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval}
+RAPTOR \cite{wu2021recursively, raptor2024} implements a hierarchical retrieval architecture that organizes documents into a multi-level tree structure. Our implementation adapts the open-source code from the RAPTOR 2024 paper \cite{raptor2024}, particularly their approach to global and local clustering hierarchies. The implementation consists of several key components:
 
+1) \textbf{Embedding and Dimensionality Reduction:} Following the RAPTOR architecture, documents are first embedded using a chosen embedding model. The system then employs UMAP (Uniform Manifold Approximation and Projection) for both global and local dimensionality reduction, with different neighborhood parameters for each level. The global clustering uses a square root-based neighborhood size, while local clustering maintains a fixed neighborhood of 10, as specified in the original RAPTOR implementation.
+
+2) \textbf{Cluster Formation:} Adopting the RAPTOR paper's clustering strategy, the system uses Gaussian Mixture Models (GMM) with Bayesian Information Criterion (BIC) to automatically determine the optimal number of clusters. Documents can belong to multiple clusters based on a probability threshold, allowing for overlapping topic coverage. The number of clusters is dynamically optimized up to a maximum of 50, adapting to the document structure.
+
+3) \textbf{Hierarchical Summarization:} At each level, documents within the same cluster are summarized using a Language Model (LLM). The summarization process is recursive, with each level building upon the summaries from the previous level. This creates a hierarchy of increasingly abstract representations, with the number of levels configurable through the \texttt{n\_levels} parameter.
+
+4) \textbf{Integration with RAG:} The system maintains both the original documents and their summaries in the vector store, enabling flexible retrieval at different levels of abstraction. This allows the system to match queries with either specific details from source documents or broader thematic summaries, depending on the query's nature.
+
+The implementation employs RAPTOR's combination of local and global clustering strategies, with careful memory management and batch processing to handle large document collections efficiently. This approach enables the system to capture both fine-grained relationships between similar documents and broader thematic connections across the corpus.
 
 \begin{figure}[H]
 	\centering
@@ -158,9 +234,57 @@ ColBERT \cite{khattab2020colbert} refines initial retrieval results by re-rankin
 	\label{fig:raptor}
 \end{figure}
 
-We incorporate RAPTOR \cite{wu2021recursively, raptor2024}, which uses hierarchical summarization to structure large corpora. RAPTOR builds a tree of summaries at increasing levels of abstraction. This architecture allows retrieval at multiple scales—broad thematic overviews down to granular details—enhancing multi-hop QA and reducing context fragmentation.
+\subsection{Pipeline Implementation}
+
+The retrieval-augmented generation pipeline is implemented as a modular sequence of clearly defined steps, each encapsulated in a \texttt{PipelineStep} class. This design allows components such as document processing, embedding generation, retrieval, reranking, and LLM-based generation that were discussed above to be easily composed, replaced, or extended.
+
+\begin{enumerate}
+    \item \textbf{Data Abstraction:} All information (documents, embeddings, queries, metadata, and results) is passed through the pipeline in a centralized \texttt{PipelineData} object. This shared state container prevents the need for extensive inter-step dependencies.
+
+    \item \textbf{Document Processing and Embedding:} The pipeline begins by applying the previously described chunking and metadata annotation to raw documents via a \texttt{DocumentProcessor}. Next, a \texttt{DocumentEmbedder} step uses the selected embedding model to encode these chunks into vector representations.
+
+    \item \textbf{Query Embedding:} A \texttt{QueryEmbedder} step similarly encodes input queries into vector form, ensuring consistency between document and query representations.
+
+    \item \textbf{Retrieval and Reranking:} Using the chosen vector database and similarity search as described above, the \texttt{Retriever} step identifies the top-$k$ relevant chunks. If ColBERT-based reranking is enabled, a subsequent \texttt{RerankerStep} refines the ranking of these retrieved chunks, emphasizing token-level alignments for improved relevance.
+
+    \item \textbf{LLM Generation:} Finally, the \texttt{Generator} step forwards both the retrieved (and optionally reranked) contexts and the original query to the LLM for response generation, resulting in a final answer that leverages the combined knowledge from the external documents.
+
+    \item \textbf{RAPTOR Option:} When using RAPTOR, the pipeline replaces the standard \texttt{DocumentProcessor} with a \texttt{RaptorProcessor}, which recursively clusters and summarizes content at multiple hierarchy levels before embeddings and retrieval. This ensures scalable handling of large corpora and improved retrieval focus.
+
+\end{enumerate}
+
+This modular composition, defined as a \texttt{RAGPipeline}, enables experimentation and fine-grained comparison across various embedding models, LLMs, retrieval strategies, and architectures like RAPTOR. The code’s design ensures easy configuration, reproducibility, and extension, supporting a wide array of use cases in retrieval-augmented generation.
 
 \subsection{Demo GUI}
+MyRAG includes an interactive web interface built with Streamlit that allows users to experiment with different RAG Pipeline configurations. The GUI offers two main interfaces:
+
+\begin{itemize}
+    \item \textbf{Simple RAG:} Allows testing of standard RAG architecture with configurable parameters including:
+    \begin{itemize}
+        \item Choice of embedding models (NV-Embed-v2, Stella 1.5B, MXBai Large, etc.)
+        \item LLM selection (Claude 3.5 Sonnet, Llama 3 8B Instruct)
+        \item Customizable system messages
+        \item Adjustable pipeline parameters (chunk size, overlap, retrieved documents $k$, etc.)
+    \end{itemize}
+    
+    \item \textbf{RAG with Reranking:} Extends the simple RAG interface with ColBERT reranking capabilities, maintaining all base configuration options while adding reranking-specific parameters. 
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{MyRAG_UI_Process_docs.png}
+    \caption{MyRAG Process Documents with Simple RAG}
+    \label{fig:process_docs}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{MyRAG_UI_QA.png}
+    \caption{MyRAG Question-Answering with Simple RAG}
+    \label{fig:qa_interface}
+\end{figure}
+
+ RAPTOR implementation is in progress and will be updated soon. The interface provides visualization of the MyRAG pipeline's performance.
 
 %----------------- Evaluations and Results -----------------%
 \section{Evaluations and Results}
@@ -192,7 +316,7 @@ Due to the size of the dataset and restrictions on accessing articles from certa
     \item To comply with server limitations on large-scale downloads, only a subset of 13 questions with 42 associated PDFs was retained for the evaluation.
 \end{itemize}
 
-For each retained question, answers are derived from 1 to 7 different PDFs. To facilitate evaluation, a CSV file was created on GitHub with the following columns:
+For each retained question, answers are derived from 1 to 7 different PDFs. To facilitate evaluation, a CSV file was created for this filtered questions with the following columns:
 \begin{itemize}
     \item \textbf{Question ID:} A unique identifier for each question.
     \item \textbf{Question:} The query posed.
@@ -203,6 +327,151 @@ For each retained question, answers are derived from 1 to 7 different PDFs. To f
 
 A web scraping script was developed to retrieve PDF file URLs from the provided article links. This processed dataset enables systematic evaluation of retrieval accuracy and relevance in biomedical contexts.
 
+\subsection{TOP-K Retrieval Accuracies}
+
+Retrieval accuracy for each embedding model is evaluated using a standard top-$k$ retrieval metric. Given $N$ queries, let $\text{retrieved}_i@k$ denote the set of top-$k$ retrieved documents for the $i$-th query, and let $\text{relevant}_i$ represent the set of relevant documents for that query. The top-$k$ retrieval accuracy, $\text{Accuracy@k}$, is computed as follows:
+
+\begin{equation}
+\text{Accuracy@k} = \frac{1}{N} \sum_{i=1}^{N} 
+    \begin{cases}
+      \mathbbm{1}(\exists d \in \text{retrieved}_i@k : d \in \text{relevant}_i), & \text{if } |\text{relevant}_i| = 1 \text{ or } k = 1 \\[6pt]
+      \frac{|\text{retrieved}_i@k \cap \text{relevant}_i|}{\min(k, |\text{relevant}_i|)}, & \text{otherwise}
+    \end{cases}
+\end{equation}
+
+The evaluations are conducted on both the BioASQ and Hugging Face Document QA datasets. All runs use the common retrieval parameters shown in Table~\ref{table:retrieval_params}. Each query is processed using a given embedding model, and the resulting top-$k$ candidates are examined according to the equation above.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Retrieval Parameter} & \textbf{Value} \\
+\hline
+Chunk Size & 4000 tokens \\
+Chunk Overlap & 200 tokens \\
+Top-$k$ & 1,2,3,4,5,7,8,10 \\
+Query Instruction & "Instruct: Given a question, retrieve passages that answer the question. Query:" for NV-Embed-v2 \\ 
+~ & "Instruct: Given a web search query, retrieve relevant passages that answer the query. Query:" for Stella \\
+~ & None for all others \\
+\hline
+\end{tabular}
+\caption{Common retrieval parameters and instructions used across experiments.}
+\label{table:retrieval_params}
+\end{table}
+
+Table~\ref{table:model_specs} presents the model specifications. The \texttt{mxbai-embed-large-v1} model is extremely resource-efficient and still provides competitive performance, making it suitable for environments with limited computational capacity. In contrast, \texttt{NV-Embed-v2 (8-bit)} is notably larger, yet still manageable due to quantization, and it achieves performance comparable to much larger models. The \texttt{stella\_en\_1.5B\_v5} model is larger and performs slightly better than \texttt{NV-Embed-v2 (8-bit)}, but at the cost of higher resource usage. Despite its closed-source nature and unknown parameters, \texttt{titan-embed-text-v2} does not surpass the best open-source embeddings. The \texttt{all-MiniLM-L6-v2} model, while very lightweight, trails behind the top performers.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Embedding Model} & \textbf{Quantization} & \textbf{Size (GB)} & \textbf{Parameters (M)} \\ \hline
+mxbai-embed-large-v1      & None   & 1.25 & 335.14 \\ \hline
+stella\_en\_1.5B\_v5 (8-bit) & 8-bit & 3.48 & 1543.27 \\ \hline
+stella\_en\_1.5B\_v5         & None  & 9.25 & 1543.27 \\ \hline
+NV-Embed-v2 (8-bit)       & 8-bit & 7.44 & 7851.02 \\ \hline
+all-MiniLM-L6-v2          & None  & 0.08 & 22.71 \\ \hline
+titan-embed-text-v2       & Unknown & Unknown & Unknown \\ \hline
+\end{tabular}
+\caption{Specifications of embedding models evaluated.}
+\label{table:model_specs}
+\end{table}
+
+Table~\ref{table:standard_rag_results} shows the top-$k$ retrieval accuracy under standard RAG (no reranking). It can be observed that \texttt{NV-Embed-v2 (8-bit)}, \texttt{mxbai-embed-large-v1}, and \texttt{stella\_en\_1.5B\_v5} achieve strong accuracy scores. Although \texttt{NV-Embed-v2 (8-bit)} is large, quantization allows it to be memory-efficient. The \texttt{mxbai-embed-large-v1} model stands out as both lightweight and high-performing, while \texttt{all-MiniLM-L6-v2} remains efficient but lags in accuracy. The closed-source \texttt{titan-embed-text-v2} does not outperform the open-source models.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{l l c c c c c c c c}
+\hline
+\textbf{Model} & \textbf{Dataset} & \textbf{k=1} & \textbf{k=2} & \textbf{k=3} & \textbf{k=4} & \textbf{k=5} & \textbf{k=7} & \textbf{k=8} & \textbf{k=10} \\
+\hline
+\multirow{2}{*}{NV-Embed-v2 (8-bit)} 
+ & BioASQ & 1.00 & 0.85 & 0.79 & 0.76 & 0.77 & 0.79 & 0.80 & 0.80 \\
+ & HF QA  & 0.91 & 0.94 & 0.98 & 0.98 & 0.98 & 1.00 & 1.00 & 1.00 \\
+\hline
+\multirow{2}{*}{all-MiniLM-L6-v2} 
+ & BioASQ & 0.62 & 0.58 & 0.51 & 0.47 & 0.57 & 0.54 & 0.57 & 0.61 \\
+ & HF QA  & 0.58 & 0.66 & 0.72 & 0.74 & 0.77 & 0.80 & 0.82 & 0.83 \\
+\hline
+\multirow{2}{*}{mxbai-embed-large-v1} 
+ & BioASQ & 1.00 & 0.92 & 0.77 & 0.70 & 0.74 & 0.77 & 0.79 & 0.79 \\
+ & HF QA  & 0.95 & 0.95 & 0.95 & 0.95 & 0.95 & 0.98 & 0.98 & 0.98 \\
+\hline
+\multirow{2}{*}{stella\_en\_1.5B\_v5} 
+ & BioASQ & 1.00 & 0.73 & 0.72 & 0.71 & 0.72 & 0.74 & 0.75 & 0.79 \\
+ & HF QA  & 0.95 & 0.98 & 0.98 & 0.98 & 1.00 & 1.00 & 1.00 & 1.00 \\
+\hline
+\multirow{2}{*}{stella\_en\_1.5B\_v5 (8-bit)} 
+ & BioASQ & 0.31 & 0.42 & 0.64 & 0.66 & 0.68 & 0.74 & 0.74 & 0.78 \\
+ & HF QA  & 0.88 & 0.91 & 0.91 & 0.91 & 0.92 & 0.94 & 0.94 & 0.94 \\
+\hline
+\multirow{2}{*}{titan-embed-text-v2} 
+ & BioASQ & 1.00 & 0.81 & 0.69 & 0.67 & 0.69 & 0.67 & 0.68 & 0.73 \\
+ & HF QA  & 0.89 & 0.91 & 0.95 & 0.97 & 0.98 & 0.98 & 0.98 & 0.98 \\
+\hline
+\end{tabular}
+\caption{Top-$k$ retrieval accuracy for standard RAG. All evaluations are performed with the parameters and instructions listed in Table~\ref{table:retrieval_params}.}
+\label{table:standard_rag_results}
+\end{table}
+
+ColBERT v2.0 reranking is then introduced to refine the top-10 results from an initial retrieval of 15 documents. The reranking parameters used are shown in Table~\ref{table:rerank_params}, and Table~\ref{table:rerank_results} presents the corresponding accuracy scores. The ColBERT reranking model, with a size of only 0.41 GB and 110M parameters, quickly rescored candidates without significant overhead.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Reranking Parameter} & \textbf{Value} \\
+\hline
+Initial Retrieval Top $k$ & 15 \\
+Reranking Top $k$ & 10 \\
+Chunk Size & 4000 tokens \\
+Chunk Overlap & 200 tokens \\
+\hline
+\end{tabular}
+\caption{Reranking parameters for experiments involving ColBERT v2.0.}
+\label{table:rerank_params}
+\end{table}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{l l c c c c c c c c}
+\hline
+\textbf{Model} & \textbf{Dataset} & \textbf{k=1} & \textbf{k=2} & \textbf{k=3} & \textbf{k=4} & \textbf{k=5} & \textbf{k=7} & \textbf{k=8} & \textbf{k=10} \\
+\hline
+\multirow{2}{*}{NV-Embed-v2 (8-bit)} 
+ & BioASQ & 1.00 & 0.81 & 0.74 & 0.77 & 0.78 & 0.80 & 0.80 & 0.82 \\
+ & HF QA  & 0.97 & 0.98 & 0.98 & 0.98 & 0.98 & 0.98 & 1.00 & 1.00 \\
+\hline
+\multirow{2}{*}{all-MiniLM-L6-v2} 
+ & BioASQ & 0.85 & 0.77 & 0.72 & 0.67 & 0.69 & 0.72 & 0.72 & 0.73 \\
+ & HF QA  & 0.88 & 0.89 & 0.89 & 0.89 & 0.91 & 0.91 & 0.91 & 0.91 \\
+\hline
+\multirow{2}{*}{mxbai-embed-large-v1} 
+ & BioASQ & 1.00 & 0.88 & 0.77 & 0.73 & 0.74 & 0.80 & 0.82 & 0.82 \\
+ & HF QA  & 0.92 & 0.97 & 0.97 & 0.98 & 0.98 & 0.98 & 0.98 & 0.98 \\
+\hline
+\multirow{2}{*}{stella\_en\_1.5B\_v5} 
+ & BioASQ & 1.00 & 0.85 & 0.72 & 0.67 & 0.73 & 0.79 & 0.79 & 0.79 \\
+ & HF QA  & 0.95 & 0.98 & 0.98 & 0.98 & 0.98 & 0.98 & 0.98 & 1.00 \\
+\hline
+\multirow{2}{*}{stella\_en\_1.5B\_v5 (8-bit)} 
+ & BioASQ & 0.92 & 0.81 & 0.72 & 0.67 & 0.68 & 0.69 & 0.70 & 0.72 \\
+ & HF QA  & 0.77 & 0.77 & 0.77 & 0.77 & 0.78 & 0.78 & 0.78 & 0.82 \\
+\hline
+\multirow{2}{*}{titan-embed-text-v2} 
+ & BioASQ & 1.00 & 0.85 & 0.74 & 0.71 & 0.73 & 0.75 & 0.77 & 0.79 \\
+ & HF QA  & 0.92 & 0.95 & 0.95 & 0.95 & 0.95 & 0.95 & 0.97 & 0.98 \\
+\hline
+\end{tabular}
+\caption{Top-$k$ retrieval accuracy after ColBERT reranking.}
+\label{table:rerank_results}
+\end{table}
+
+ColBERT reranking generally improves performance, especially for models that had weaker initial retrieval results. For instance, \texttt{all-MiniLM-L6-v2} and \texttt{titan-embed-text-v2} show notable gains, indicating that fine-grained token-level scoring helps surface more relevant candidates at top ranks. For strong models like \texttt{NV-Embed-v2 (8-bit)}, reranking raises the HF QA $k=1$ accuracy from 0.91 to 0.97, but the gains diminish at higher $k$ values, suggesting that reranking is most beneficial for improving the very top results rather than broader sets.
+
+The RAPTOR-based retriever is not included in these top-$k$ evaluations as it involves hierarchical summaries that complicate direct comparison to standard retrieval methods. Future iterations will incorporate RAPTOR retrieval accuracies, enabling comparisons across the full spectrum of retrieval strategies.
 
 \subsection{TOP-K Retrieval Accuracies}
 
@@ -261,8 +530,85 @@ Here:
 \label{table:top_k_retrieval_accuracy_table}
 \end{table}
 
-As illustrated in Table  \ref{table:top_k_retrieval_accuracy_table}, the \texttt{NV-Embed-v2 (8-bit)} model, which utilizes 7.44 GB of GPU memory, performs comparably to the \texttt{stella\_en\_1.5B\_v5} model that consumes 9.25 GB. However, \texttt{stella\_en\_1.5B\_v5} achieves slightly better scores overall. Notably, the lightweight \texttt{mxbai-embed-large-v1}, which requires only 1.25 GB of GPU memory, performs equally well and, in some cases, even slightly better than \texttt{stella\_en\_1.5B\_v5}. While the \texttt{all-MiniLM-L6-v2} is also very lightweight, it does not perform as well. Additionally, the closed-source \texttt{titan-embed-text-v2} model from Amazon, does not outperform the open-source models. Parameters used while retrieval in appendix
+As illustrated in Table \ref{table:top_k_retrieval_accuracy_table}, the \texttt{NV-Embed-v2 (8-bit)} model, which utilizes 7.44 GB of GPU memory, performs comparably to the \texttt{stella\_en\_1.5B\_v5} model that consumes 9.25 GB. However, \texttt{stella\_en\_1.5B\_v5} achieves slightly better scores overall. Notably, the lightweight \texttt{mxbai-embed-large-v1}, which requires only 1.25 GB of GPU memory, performs equally well and, in some cases, even slightly better than \texttt{stella\_en\_1.5B\_v5}. While the \texttt{all-MiniLM-L6-v2} is also very lightweight, it does not perform as well. Additionally, the closed-source \texttt{titan-embed-text-v2} model from Amazon, does not outperform the open-source models. The retrieval parameters used for each model are detailed in Table \ref{table:retrieval_params}.
 
+\subsubsection{Embedding Model Specifications}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Model Name} & \textbf{Quantization} & \textbf{Size (GB)} & \textbf{Parameters (Millions)} \\ \hline
+mxbai-embed-large-v1 & None              & 1.25 & 335.14 \\ \hline
+stella\_en\_1.5B\_v5 (8-bit) & 8-bit          & 3.48 & 1543.27 \\ \hline
+stella\_en\_1.5B\_v5         & None           & 9.25 & 1543.27 \\ \hline
+NV-Embed-v2 (8-bit)            & 8-bit          & 7.44 & 7851.02 \\ \hline
+all-MiniLM-L6-v2 & None          & 0.08 & 22.71 \\ \hline
+titan-embed-text-v2                   & Unknown        & Unknown & Unknown \\ \hline
+Meta-Llama-3-8B-Instruct (8-bit) & 8-bit   & 10.42 & 8030.26 \\ \hline
+claude-3-5-sonnet-20240620-v1      & Unknown           & Unknown & Unknown \\ \hline
+colbertv2.0       & None                  & 0.41 & 110               \\ \hline
+\end{tabular}
+\caption{Specifications of Models used in MyRag}
+\label{table:models_specification}
+\end{table}
+
+
+\subsubsection{Retrieval Parameters}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Parameter} & \textbf{Value} \\
+\hline
+Chunk Size & 4000 tokens \\
+Chunk Overlap & 200 tokens \\
+Top k & 10 \\
+\hline
+\end{tabular}
+\caption{Standard RAG Retrieval Parameters}
+\label{table:retrieval_params}
+\end{table}
+
+
+\subsubsection{Reranking Parameters}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Parameter} & \textbf{Value} \\
+\hline
+Initial Retrieval Top k & 15 \\
+Reranking Top k & 10 \\
+Chunk Size & 4000 tokens \\
+Chunk Overlap & 200 tokens \\
+\hline
+\end{tabular}
+\caption{Standard Rag with ColBERT Reranking Parameters}
+\label{table:rerank_params}
+\end{table}
+
+\subsubsection{Query Instruction used}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|p{10cm}|} % Adjust the width of the column as needed
+\hline
+\textbf{Embedding model} & \textbf{Query Instruction} \\
+\hline
+NV-Embed-v2 & "Instruct: Given a question, retrieve passages that answer the question. Query:" \\
+mxbai-embed-large-v1 & None \\
+stella\_en\_1.5B\_v5 & "Instruct: Given a web search query, retrieve relevant passages that answer the query. Query:" \\
+all-MiniLM-L6-v2 & None \\
+titan-embed-text-v2 & None \\
+colbertv2.0(ColBert re-ranking) & None \\
+\hline
+\end{tabular}
+\caption{Embedding model Specific Query Instructions used across all results mentioned in this paper}
+\label{table:model_instructions}
+\end{table}
 
 
 \begin{table}[H]
@@ -401,7 +747,7 @@ RAPTOR improves handling of long, complex and multiple documents by recursively 
 %----------------- Challenges and Future Work -----------------%
 \section{Challenges and Future Work}
 \begin{itemize}
-    \item \textbf{Evaluation Metrics:} Current evaluation focuses on document-level accuracy. Future work includes more fine-grained evaluation (e.g., chunk-level), automated scoring methods, and domain expert assessments to better understand retrieval quality in specialized domains.
+    \item \textbf{Evaluation Metrics:} Current retriever evaluation focuses on document-level accuracy. Future work includes more fine-grained evaluation (e.g., chunk level), automated scoring methods for retriever, and domain expert assessments of entire QA RAG to better understand retrieval quality in specialized domains.
     
     \item \textbf{Document Parsing:} MyRAG currently processes textual data. Extending it to multimodal inputs (PDFs with figures, images, or even audio transcripts) would demand integrating vision and ASR models, enabling comprehensive retrieval across diverse data formats.
     
@@ -419,28 +765,7 @@ Future efforts will enhance evaluation methods, integrate multimodal capabilitie
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 
-\appendix
-\section{Model Specifications}
-
-\begin{table}[ht]
-\centering
-\begin{tabular}{|l|c|c|c|}
-\hline
-\textbf{Model Name} & \textbf{Quantization} & \textbf{Size (GB)} & \textbf{Parameters (Millions)} \\ \hline
-mxbai-embed-large-v1 & None              & 1.25 & 335.14 \\ \hline
-stella\_en\_1.5B\_v5 (8-bit) & 8-bit          & 3.48 & 1543.27 \\ \hline
-stella\_en\_1.5B\_v5         & None           & 9.25 & 1543.27 \\ \hline
-NV-Embed-v2 (8-bit)            & 8-bit          & 7.44 & 7851.02 \\ \hline
-all-MiniLM-L6-v2 & None          & 0.08 & 22.71 \\ \hline
-titan-embed-text-v2                   & Unknown        & Unknown & Unknown \\ \hline
-Meta-Llama-3-8B-Instruct (8-bit) & 8-bit   & 10.42 & 8030.26 \\ \hline
-claude-3-5-sonnet-20240620-v1      & Unknown           & Unknown & Unknown \\ \hline
-colbertv2.0       & None                  & 0.41 & 110               \\ \hline
-\end{tabular}
-\caption{Specifications of Models used in MyRag}
-\label{table:models_specification}
-\end{table}
-
+% \appendix
 % Additional details, code excerpts, and extended results can be placed here.
 % Appendices for MyRag
 %Put hyper parameters tables top k used, settings used , temperature used, instruction used

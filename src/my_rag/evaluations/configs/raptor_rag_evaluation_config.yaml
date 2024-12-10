@@ -62,8 +62,6 @@ llm_models:
   #       early_stopping: true
   #       no_repeat_ngram_size: 3
   - name: "anthropic.claude-3-5-sonnet-20240620-v1:0"
-    instruction: "Instruct: Represent this passage for retrieval in response to relevant questions.\nQuery:"
-    query_instruction: "Instruct: Given a query, find the most relevant passages that can provide the answer.\nPassage:"
     model_kwargs:
       aws: true
       aws_creds_file: /home/ubuntu/Multi-Agent-LLM-System-with-LangGraph-RAG-and-LangChain/config/config.ini
