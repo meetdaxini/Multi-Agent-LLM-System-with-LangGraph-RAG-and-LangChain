@@ -113,7 +113,7 @@
 %% Sample for unstructured abstract %%
 %%==================================%%
 
-\abstract{Retrieval-Augmented Generation (RAG) has emerged as a powerful paradigm for providing personalized, relevant, and current information to user queries by combining large language models (LLMs) with external retrieval modules. This paper presents \textit{MyRAG}, an open source code that unifies and compares different state-of-the-art RAG architectures and retrieval techniques. This paper explores embeddings, vector databases, and advanced retrieval methods, including ColBERT-based reranking and the hierarchical summarization-based RAPTOR architecture. By evaluating different datasets, it demonstrates how different configurations impact retrieval accuracy and downstream QA performance. The results offer insights into optimizing RAG pipelines, guiding both practitioners and researchers toward more efficient and effective retrieval-augmented generation.}
+\abstract{Retrieval-Augmented Generation (RAG) has emerged as a powerful paradigm for providing personalized, relevant, and current information to user queries by combining large language models (LLMs) with external retrieval modules. This paper presents \textit{MyRAG}, an open source code that unifies and compares different state-of-the-art RAG architectures and retrieval techniques. This paper explores embeddings, vector databases, and advanced retrieval approaches, including ColBERT (Contextualized Late Interaction over Bidirectional Encoder Representations from Transformers) for contrastive reranking and RAPTOR (Recursive Abstractive Processing for Tree-Organized Retrieval) for hierarchical summarization-based retrieval. By evaluating different datasets, it demonstrates how different configurations impact retrieval accuracy and downstream QA performance. The results offer insights into optimizing RAG pipelines, guiding both practitioners and researchers toward more efficient and effective retrieval-augmented generation.}
 
 %%================================%%
 %% Sample for structured abstract %%
@@ -136,11 +136,13 @@
 
 \maketitle
 
+\newpage
+
 \section{Introduction}\label{sec1}
 
 The exponential growth of digital information has increased the demand for intelligent systems that can efficiently retrieve relevant context and answer complex questions. Large Language Models (LLMs) often possess extensive parametric knowledge, but may lack reliable, up-to-date information. Retrieval-Augmented Generation (RAG) has gained prominence as a solution to this challenge, bridging large-scale language understanding with external retrieval components to produce more grounded and accurate responses \cite{lewis2020retrieval, guu2020realm}.
 
-In RAG pipelines, the LLM accesses external knowledge sources, retrieving relevant documents or chunks to augment its prompt. This approach enhances the model’s factual accuracy, reduces hallucinations, and updates knowledge without retraining the entire model. As the sizes of the context window continue to expand \cite{liu2023lost}, it is increasingly practical to provide LLMs with larger and more diverse sets of the retrieved context.
+In RAG pipelines, as illustrated in Figure \ref{fig:standard_rag_flow},  the LLM accesses external knowledge sources, retrieving relevant documents or chunks to augment its prompt. This approach enhances the model’s factual accuracy, reduces hallucinations, and updates knowledge without retraining the entire model. As the sizes of the context window continue to expand \cite{liu2023lost}, it is increasingly practical to provide LLMs with larger and more diverse sets of the retrieved context.
 
 \begin{figure}[h]
     \centering
@@ -215,7 +217,7 @@ MyRAG supports integration with both AWS Bedrock and Hugging Face python library
 
 
 \subsection{ColBERT Reranking} \label{subsec3.5}
-ColBERT \cite{khattab2020colbert} provides a reranking framework that refines retrieval results by comparing query tokens against all tokens in candidate documents, rather than relying on a single vector embedding per document. Unlike traditional embeddings, which compress each document into a single vector, ColBERT applies a late interaction mechanism to handle token-level embeddings. This approach computes similarities between each query token embedding and every token embedding in a document, ensuring that important context within a document is not lost due to over-compression.
+ColBERT \cite{khattab2020colbert} provides a reranking framework that refines retrieval results by comparing query tokens against all tokens in candidate documents, rather than relying on a single vector embedding per document. Unlike traditional embeddings, which compress each document into a single vector, ColBERT applies a late interaction mechanism to handle token-level embeddings. The standard document scoring process in RAG, as illustrated in Figure \ref{fig:standard_doc_scoring}, demonstrates how documents are typically scored based on similarity to the query, with the top k documents retrieved based on their overall scores. In contrast, ColBERT scoring operates differently, as described here and illustrated in Figure \ref{fig:colbert}. Instead of a single score for each document, ColBERT computes similarities between individual query tokens and token embeddings in the documents, ensuring that finer contextual alignments are captured.
 
 
 \begin{figure}[h]
@@ -239,11 +241,13 @@ ColBERT \cite{khattab2020colbert} provides a reranking framework that refines re
 	\label{fig:reranking_rag}
 \end{figure}
 
-The implementation in MyRAG leverages the RAGatouille python library to integrate ColBERT v2.0 model for the re-ranking step following the initial retrieval process. After retrieving a candidate set of documents, the RAGatouille-based ColBERT implementation scores each document based on fine-grained token alignments with the query. These fine-grained comparisons enable the system to re-prioritize documents that contain subtle but crucial semantic clues.
+Figure \ref{fig:reranking_rag} outlines how ColBERT reranking is integrated within the MyRAG system, demonstrating how the reranked results from ColBERT feed into the subsequent retrieval-augmented generation process. The implementation in MyRAG leverages the RAGatouille python library to integrate ColBERT v2.0 model for the re-ranking step following the initial retrieval process. After retrieving a candidate set of documents, the RAGatouille-based ColBERT implementation scores each document based on fine-grained token alignments with the query. These fine-grained comparisons enable the system to re-prioritize documents that contain subtle but crucial semantic clues.
 
 
 \subsection{RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval} \label{subsec3.6}
-RAPTOR \cite{wu2021recursively, raptor2024} organizes documents into a hierarchical retrieval structure via recursive clustering and summarization. It embeds documents using a chosen embedding model and applies UMAP for dimensionality reduction. A Gaussian Mixture Model (GMM) guided by the Bayesian Information Criterion (BIC) then clusters documents, automatically determining an optimal number of clusters (up to 50). Each cluster is recursively summarized at multiple levels, with each level’s summaries serving as inputs for higher-level abstraction. This hierarchy, stored alongside original documents in the vector database, enables flexible retrieval: queries can target more granular original texts or more abstract, high-level summaries. This approach efficiently captures both fine-grained semantic details and broader thematic groupings of the corpus.
+RAPTOR \cite{wu2021recursively, raptor2024} organizes documents into a hierarchical retrieval structure via recursive clustering and summarization. It embeds documents using a chosen embedding model and applies UMAP for dimensionality reduction. A Gaussian Mixture Model (GMM) guided by the Bayesian Information Criterion (BIC) then clusters documents, automatically determining an optimal number of clusters (up to 50). Each cluster is recursively summarized at multiple levels, with each level’s summaries serving as inputs for higher-level abstraction. 
+
+This hierarchical process, as illustrated in Figure \ref{fig:raptor}, is integrated into MyRAG to enable flexible retrieval. The hierarchy, stored alongside original documents in the vector database, allows queries to target either granular original texts or abstract, high-level summaries. This approach efficiently captures both fine-grained semantic details and broader thematic groupings of the corpus.
 
 \begin{figure}[h]
 	\centering
